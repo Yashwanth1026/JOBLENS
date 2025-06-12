@@ -1,0 +1,1 @@
+the package will be added to your package.json dependencies and you can continue using the animation effects in your component. No code changes are needed - the import statement is correct, it just needed the package to be installed first.
