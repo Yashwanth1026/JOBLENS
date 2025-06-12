@@ -10,7 +10,7 @@ nltk.download('punkt', quiet=True)
 nlp = spacy.load("en_core_web_sm")
 
 # Define dataset paths
-BASE_DIR = "C:/Users/yaswa/OneDrive/Desktop/JobLens/datasets/"
+BASE_DIR = "C:/Users/yaswa/OneDrive/Desktop/JOBLENS/datasets/"
 SKILLS_FILE = os.path.join(BASE_DIR, "skills.json")
 EDUCATION_FILE = os.path.join(BASE_DIR, "education.json")
 
