@@ -6,12 +6,20 @@ import textdistance
 from docx import Document
 from sklearn.feature_extraction.text import TfidfVectorizer
 from collections import Counter
+import logging
+
+# Set up logging for Render
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s - %(levelname)s - %(message)s"
+)
+logger = logging.getLogger(__name__)
 
 # Load spaCy model for NER and advanced text processing
 try:
     nlp = spacy.load("en_core_web_sm")
-except:
-    print("Installing spaCy model... This might take a moment.")
+except Exception as e:
+    logger.warning("Installing spaCy model due to: %s", str(e))
     import subprocess
     subprocess.call("python -m spacy download en_core_web_sm", shell=True)
     nlp = spacy.load("en_core_web_sm")
@@ -24,17 +32,20 @@ def extract_text_from_pdf(pdf_path):
             reader = PyPDF2.PdfReader(file)
             for page in reader.pages:
                 text += page.extract_text() or ""
+        logger.debug("Successfully extracted text from PDF: %s", pdf_path)
         return text.lower()
     except Exception as e:
-        print(f"Error extracting text from PDF: {e}")
+        logger.error("Error extracting text from PDF %s: %s", pdf_path, str(e))
         return ""
 
 def extract_text_from_docx(docx_path):
     try:
         doc = Document(docx_path)
-        return "\n".join([para.text.lower() for para in doc.paragraphs])
+        text = "\n".join([para.text.lower() for para in doc.paragraphs])
+        logger.debug("Successfully extracted text from DOCX: %s", docx_path)
+        return text
     except Exception as e:
-        print(f"Error extracting text from DOCX: {e}")
+        logger.error("Error extracting text from DOCX %s: %s", docx_path, str(e))
         return ""
 
 # === Check ATS Compatibility ===
@@ -74,7 +85,9 @@ def check_ats_compatibility(resume_text, job_description=""):
     results['details']['structure']['missing_sections'] = missing_sections
     
     if missing_sections:
-        results['warnings'].append(f"Missing sections: {', '.join(missing_sections)}")
+        warning = f"Missing sections: {', '.join(missing_sections)}"
+        results['warnings'].append(warning)
+        logger.warning(warning)
         results['score'] -= min(5 * len(missing_sections), 20)  # Cap at 20 points penalty
 
     # Check section order
@@ -97,7 +110,9 @@ def check_ats_compatibility(resume_text, job_description=""):
             exp_idx = ordered_sections.index('experience')
             edu_idx = ordered_sections.index('education')
             if edu_idx < exp_idx:
-                results['recommendations'].append("⚠️ Consider placing work experience before education (unless you're a recent graduate).")
+                recommendation = "⚠️ Consider placing work experience before education (unless you're a recent graduate)."
+                results['recommendations'].append(recommendation)
+                logger.info(recommendation)
                 results['score'] -= 3
 
     # Check contact information
@@ -112,15 +127,21 @@ def check_ats_compatibility(resume_text, job_description=""):
     }
     
     if not emails:
-        results['warnings'].append("❗ Missing email address.")
+        warning = "❗ Missing email address."
+        results['warnings'].append(warning)
+        logger.warning(warning)
         results['score'] -= 5
     
     if not phones:
-        results['warnings'].append("❗ Missing phone number.")
+        warning = "❗ Missing phone number."
+        results['warnings'].append(warning)
+        logger.warning(warning)
         results['score'] -= 5
     
     if not has_linkedin:
-        results['recommendations'].append("💡 Consider adding your LinkedIn profile.")
+        recommendation = "💡 Consider adding your LinkedIn profile."
+        results['recommendations'].append(recommendation)
+        logger.info(recommendation)
         results['score'] -= 2
 
     # Check date format consistency
@@ -140,10 +161,14 @@ def check_ats_compatibility(resume_text, job_description=""):
     results['details']['formatting']['date_formats'] = found_formats
     
     if len(found_formats) > 1:
-        results['warnings'].append("❗ Inconsistent date formats detected. Stick to one format.")
+        warning = "❗ Inconsistent date formats detected. Stick to one format."
+        results['warnings'].append(warning)
+        logger.warning(warning)
         results['score'] -= 5
     elif len(found_formats) == 0:
-        results['warnings'].append("❗ No standard date formats detected.")
+        warning = "❗ No standard date formats detected."
+        results['warnings'].append(warning)
+        logger.warning(warning)
         results['score'] -= 5
 
     # Check for action-oriented keywords
@@ -165,14 +190,14 @@ def check_ats_compatibility(resume_text, job_description=""):
     }
     
     if len(found_keywords) < 5:
-        results['recommendations'].append(
-            f"💡 Add more action verbs. Consider: {', '.join(missing_keywords[:5])}"
-        )
+        recommendation = f"💡 Add more action verbs. Consider: {', '.join(missing_keywords[:5])}"
+        results['recommendations'].append(recommendation)
+        logger.info(recommendation)
         results['score'] -= 7
     elif len(found_keywords) < 10:
-        results['recommendations'].append(
-            f"💡 Consider adding more action verbs: {', '.join(missing_keywords[:3])}"
-        )
+        recommendation = f"💡 Consider adding more action verbs: {', '.join(missing_keywords[:3])}"
+        results['recommendations'].append(recommendation)
+        logger.info(recommendation)
         results['score'] -= 3
 
     # Check bullet point consistency
@@ -189,7 +214,9 @@ def check_ats_compatibility(resume_text, job_description=""):
     results['details']['formatting']['bullet_types'] = bullet_counts
     
     if len(bullet_counts) > 1:
-        results['warnings'].append("❗ Inconsistent bullet point styles. Stick to one type.")
+        warning = "❗ Inconsistent bullet point styles. Stick to one type."
+        results['warnings'].append(warning)
+        logger.warning(warning)
         results['score'] -= 3
 
     # Check for keyword optimization using job description
@@ -198,23 +225,25 @@ def check_ats_compatibility(resume_text, job_description=""):
         results['details']['keywords']['job_description_similarity'] = round(similarity_score * 100, 2)
         
         if similarity_score < 0.35:
-            results['recommendations'].append(
-                f"⚡️ Increase keyword alignment with job description. Similarity Score: {round(similarity_score * 100, 2)}%"
-            )
+            recommendation = f"⚡️ Increase keyword alignment with job description. Similarity Score: {round(similarity_score * 100, 2)}%"
+            results['recommendations'].append(recommendation)
+            logger.info(recommendation)
             results['score'] -= 10
             
             # Extract key missing terms from job description
             missing_terms = extract_key_missing_terms(resume_text, job_description)
             if missing_terms:
-                results['recommendations'].append(
-                    f"💡 Consider adding these keywords from the job description: {', '.join(missing_terms[:5])}"
-                )
+                recommendation = f"💡 Consider adding these keywords from the job description: {', '.join(missing_terms[:5])}"
+                results['recommendations'].append(recommendation)
+                logger.info(recommendation)
                 results['details']['keywords']['missing_job_keywords'] = missing_terms
 
     # Check for spacing issues
     double_spaces = len(re.findall(r'\s\s+', resume_text))
     if double_spaces > 5:
-        results['warnings'].append("❗ Multiple double spaces detected. Check formatting.")
+        warning = "❗ Multiple double spaces detected. Check formatting."
+        results['warnings'].append(warning)
+        logger.warning(warning)
         results['score'] -= 3
         results['details']['formatting']['double_spaces'] = double_spaces
 
@@ -222,16 +251,18 @@ def check_ats_compatibility(resume_text, job_description=""):
     formatting_issues = []
     if re.search(r'table|column|graphic|image', resume_text):
         formatting_issues.append("tables/columns/graphics")
-        results['warnings'].append("❗ Avoid using tables, columns, or graphics.")
+        warning = "❗ Avoid using tables, columns, or graphics."
+        results['warnings'].append(warning)
+        logger.warning(warning)
         results['score'] -= 5
     
     # Check for hyperlinks
     hyperlinks = re.findall(r'http[s]?://(?:[a-zA-Z]|[0-9]|[$-_@.&+])+', resume_text)
     if hyperlinks:
         formatting_issues.append("hyperlinks")
-        results['recommendations'].append(
-            "⚠️ Avoid using hyperlinks – they may not parse correctly in ATS."
-        )
+        recommendation = "⚠️ Avoid using hyperlinks – they may not parse correctly in ATS."
+        results['recommendations'].append(recommendation)
+        logger.info(recommendation)
         results['score'] -= 5
         results['details']['formatting']['hyperlinks'] = hyperlinks
 
@@ -242,12 +273,14 @@ def check_ats_compatibility(resume_text, job_description=""):
     results['details']['content']['word_count'] = word_count
     
     if word_count < 300:
-        results['warnings'].append("⚠️ Resume might be too short (under 300 words).")
+        warning = "⚠️ Resume might be too short (under 300 words)."
+        results['warnings'].append(warning)
+        logger.warning(warning)
         results['score'] -= 10
     elif word_count > 800:
-        results['recommendations'].append(
-            "⚠️ Resume might be too long (over 800 words)."
-        )
+        recommendation = "⚠️ Resume might be too long (over 800 words)."
+        results['recommendations'].append(recommendation)
+        logger.info(recommendation)
         results['score'] -= 5
 
     # Check for skill section quality
@@ -261,7 +294,9 @@ def check_ats_compatibility(resume_text, job_description=""):
             results['details']['content']['skills'] = skill_words
             
             if len(skill_words) < 5:
-                results['recommendations'].append("💡 Add more specific skills to your skills section.")
+                recommendation = "💡 Add more specific skills to your skills section."
+                results['recommendations'].append(recommendation)
+                logger.info(recommendation)
                 results['score'] -= 5
             
             # Check for skill categorization
@@ -269,7 +304,9 @@ def check_ats_compatibility(resume_text, job_description=""):
             has_categories = any(category in skills_text.lower() for category in skill_categories)
             
             if not has_categories and len(skill_words) > 10:
-                results['recommendations'].append("💡 Consider categorizing your skills for better readability.")
+                recommendation = "💡 Consider categorizing your skills for better readability."
+                results['recommendations'].append(recommendation)
+                logger.info(recommendation)
                 results['score'] -= 2
 
     # Check for personal pronouns
@@ -278,13 +315,14 @@ def check_ats_compatibility(resume_text, job_description=""):
     results['details']['content']['pronoun_count'] = pronoun_count
     
     if pronoun_count > 5:
-        results['recommendations'].append("⚠️ Avoid using personal pronouns (I, me, my) in your resume.")
+        recommendation = "⚠️ Avoid using personal pronouns (I, me, my) in your resume."
+        results['recommendations'].append(recommendation)
+        logger.info(recommendation)
         results['score'] -= 5
 
-    # Check for file name
-    # This would require access to the file name, which we don't have directly
-    # But we can add a recommendation
+    # Check for file name recommendation (cannot check actual file name in this context)
     results['recommendations'].append("💡 Ensure your file name follows the format: FirstName_LastName_Resume.pdf")
+    logger.info("Added recommendation for file name format.")
 
     # Check for quantifiable achievements
     quantifiable_pattern = r'\d+%|\$\d+|\d+ years|\d+ months|\d+ people|\d+ team|\d+ project|\d+ client'
@@ -292,7 +330,9 @@ def check_ats_compatibility(resume_text, job_description=""):
     results['details']['content']['quantifiable_achievements'] = quantifiables
     
     if len(quantifiables) < 3:
-        results['recommendations'].append("💡 Add more quantifiable achievements (%, $, numbers).")
+        recommendation = "💡 Add more quantifiable achievements (%, $, numbers)."
+        results['recommendations'].append(recommendation)
+        logger.info(recommendation)
         results['score'] -= 5
 
     # Check for education details
@@ -301,7 +341,9 @@ def check_ats_compatibility(resume_text, job_description=""):
         has_degree = bool(re.search(degree_pattern, resume_text, re.IGNORECASE))
         
         if not has_degree:
-            results['recommendations'].append("💡 Specify your degree type in the education section.")
+            recommendation = "💡 Specify your degree type in the education section."
+            results['recommendations'].append(recommendation)
+            logger.info(recommendation)
             results['score'] -= 3
 
     # Check for acronyms with definitions
@@ -309,7 +351,9 @@ def check_ats_compatibility(resume_text, job_description=""):
     defined_acronyms = re.findall(r'\([A-Z]{2,}\)', resume_text)
     
     if len(acronyms) > len(defined_acronyms) + 3:
-        results['recommendations'].append("💡 Consider defining industry-specific acronyms.")
+        recommendation = "💡 Consider defining industry-specific acronyms."
+        results['recommendations'].append(recommendation)
+        logger.info(recommendation)
         results['score'] -= 2
 
     # Check for repeated words
@@ -320,12 +364,15 @@ def check_ats_compatibility(resume_text, job_description=""):
     
     if repeated_words:
         results['details']['content']['overused_words'] = repeated_words
-        results['recommendations'].append(f"💡 Avoid overusing these words: {', '.join(repeated_words[:3])}")
+        recommendation = f"💡 Avoid overusing these words: {', '.join(repeated_words[:3])}"
+        results['recommendations'].append(recommendation)
+        logger.info(recommendation)
         results['score'] -= 2
 
     # Final score capping
     results['score'] = max(0, min(results['score'], 100))
 
+    logger.info("ATS compatibility check completed. Score: %d", results['score'])
     return results
 
 # === Extract Skills from Text ===
@@ -350,6 +397,7 @@ def extract_skills(text):
         if 2 <= len(chunk.text.split()) <= 4 and chunk.text.lower() not in found_skills:
             found_skills.append(chunk.text.lower())
     
+    logger.debug("Extracted skills: %s", found_skills)
     return found_skills
 
 # === Extract Missing Keywords ===
@@ -384,6 +432,7 @@ def extract_key_missing_terms(resume_text, job_description):
             if not has_similar:
                 missing_keywords.append(keyword)
     
+    logger.debug("Missing keywords from job description: %s", missing_keywords)
     return missing_keywords
 
 # === TF-IDF Similarity for Keyword Optimization ===
@@ -392,8 +441,10 @@ def calculate_tfidf_similarity(resume_text, job_description):
     try:
         vectors = vectorizer.fit_transform([resume_text, job_description.lower()])
         similarity_score = (vectors[0] * vectors[1].T).toarray()[0][0]
+        logger.debug("TF-IDF similarity score: %.2f", similarity_score)
         return similarity_score
-    except:
+    except Exception as e:
+        logger.error("Error calculating TF-IDF similarity: %s", str(e))
         return 0.0
 
 # === Final Report Generation ===
@@ -475,6 +526,17 @@ def generate_report(analysis, output_file=None):
         else:
             report.append("- No major formatting issues detected")
     
+    # Industry benchmark details (if available)
+    if 'industry_benchmark' in analysis['details']:
+        benchmark = analysis['details']['industry_benchmark']
+        report.append("\n🏢 Industry Benchmarking:")
+        report.append(f"- Detected Industry: {benchmark['industry'].capitalize()}")
+        report.append(f"- Industry Relevance: {int(benchmark['industry_relevance'] * 100)}%")
+        if benchmark['present_keywords']:
+            report.append(f"- Present Keywords: {', '.join(benchmark['present_keywords'][:5])}")
+        if benchmark['missing_keywords']:
+            report.append(f"- Missing Keywords: {', '.join(benchmark['missing_keywords'][:5])}")
+    
     if score >= 80:
         report.append("\n🎉 Status: ATS-Friendly Resume! Ready for submission.")
     elif score >= 60:
@@ -482,16 +544,22 @@ def generate_report(analysis, output_file=None):
     else:
         report.append("\n⚠️ Status: Resume needs significant improvements before submission.")
     
-    # Print report
-    for line in report:
-        print(line)
+    # Convert report to string
+    report_str = "\n".join(report)
+    
+    # Log the report
+    logger.info("ATS Report Generated:\n%s", report_str)
     
     # Save report to file if requested
     if output_file:
-        with open(output_file, 'w') as f:
-            for line in report:
-                f.write(line + "\n")
-        print(f"\nReport saved to {output_file}")
+        try:
+            with open(output_file, 'w') as f:
+                f.write(report_str)
+            logger.info("Report saved to %s", output_file)
+        except Exception as e:
+            logger.error("Failed to save report to %s: %s", output_file, str(e))
+    
+    return report_str
 
 # === Resume Benchmarking ===
 def benchmark_against_industry(resume_text, industry=""):
@@ -521,47 +589,136 @@ def benchmark_against_industry(resume_text, industry=""):
     # Check how many industry keywords are present
     present_keywords = [kw for kw in relevant_keywords if kw in resume_text.lower()]
     
-    return {
+    benchmark_result = {
         "industry": industry,
         "industry_relevance": len(present_keywords) / len(relevant_keywords) if relevant_keywords else 0,
         "present_keywords": present_keywords,
         "missing_keywords": [kw for kw in relevant_keywords if kw not in resume_text.lower()]
     }
+    
+    logger.debug("Industry benchmark result: %s", benchmark_result)
+    return benchmark_result
 
 # === File Format Checker ===
 def check_file_format(file_path):
-    file_ext = os.path.splitext(file_path)[1].lower()
-    file_size = os.path.getsize(file_path) / (1024 * 1024)  # Size in MB
+    try:
+        file_ext = os.path.splitext(file_path)[1].lower()
+        file_size = os.path.getsize(file_path) / (1024 * 1024)  # Size in MB
+        
+        format_issues = []
+        
+        if file_ext not in ['.pdf', '.docx']:
+            issue = f"File format '{file_ext}' may not be ATS-friendly. Use .pdf or .docx"
+            format_issues.append(issue)
+            logger.warning(issue)
+        
+        if file_size > 5:
+            issue = f"File size ({file_size:.2f}MB) exceeds 5MB, which may cause issues with some ATS"
+            format_issues.append(issue)
+            logger.warning(issue)
+        
+        if file_ext == '.pdf':
+            # Check if PDF is searchable
+            try:
+                with open(file_path, 'rb') as file:
+                    reader = PyPDF2.PdfReader(file)
+                    first_page = reader.pages[0]
+                    text = first_page.extract_text()
+                    if not text or len(text) < 100:
+                        issue = "PDF may not be searchable/machine-readable"
+                        format_issues.append(issue)
+                        logger.warning(issue)
+            except Exception as e:
+                issue = f"Error checking PDF: {str(e)}"
+                format_issues.append(issue)
+                logger.error(issue)
+        
+        result = {
+            "format": file_ext,
+            "size_mb": file_size,
+            "issues": format_issues
+        }
+        
+        logger.info("File format check result for %s: %s", file_path, result)
+        return result
+    except Exception as e:
+        logger.error("Error in check_file_format for %s: %s", file_path, str(e))
+        return {
+            "format": "unknown",
+            "size_mb": 0,
+            "issues": [f"Error accessing file: {str(e)}"]
+        }
+
+# === Function for Server Use ===
+def analyze_resume(file_path, job_description="", industry=""):
+    """
+    Analyze a resume file for ATS compatibility.
+    Suitable for use in a server environment like Render.
     
-    format_issues = []
+    Args:
+        file_path (str): Path to the resume file (PDF or DOCX)
+        job_description (str): Job description text for keyword matching
+        industry (str): Industry for benchmarking (optional)
     
-    if file_ext not in ['.pdf', '.docx']:
-        format_issues.append(f"File format '{file_ext}' may not be ATS-friendly. Use .pdf or .docx")
+    Returns:
+        dict: Analysis results and report
+    """
+    logger.info("Starting ATS analysis for file: %s", file_path)
     
-    if file_size > 5:
-        format_issues.append(f"File size ({file_size:.2f}MB) exceeds 5MB, which may cause issues with some ATS")
+    # Check file format
+    format_check = check_file_format(file_path)
+    if format_check["issues"]:
+        logger.warning("File format issues detected: %s", format_check["issues"])
     
-    if file_ext == '.pdf':
-        # Check if PDF is searchable
-        try:
-            with open(file_path, 'rb') as file:
-                reader = PyPDF2.PdfReader(file)
-                first_page = reader.pages[0]
-                text = first_page.extract_text()
-                if not text or len(text) < 100:
-                    format_issues.append("PDF may not be searchable/machine-readable")
-        except Exception as e:
-            format_issues.append(f"Error checking PDF: {e}")
+    # Extract text from resume
+    logger.info("Extracting text from resume...")
+    if file_path.lower().endswith('.pdf'):
+        text = extract_text_from_pdf(file_path)
+    elif file_path.lower().endswith('.docx'):
+        text = extract_text_from_docx(file_path)
+    else:
+        error_msg = "Unsupported file format. Please use PDF or DOCX."
+        logger.error(error_msg)
+        return {
+            "error": error_msg,
+            "format_check": format_check
+        }
+    
+    if not text:
+        error_msg = "Failed to extract text from the resume."
+        logger.error(error_msg)
+        return {
+            "error": error_msg,
+            "format_check": format_check
+        }
+    
+    # Analyze the resume
+    logger.info("Analyzing resume...")
+    analysis = check_ats_compatibility(text, job_description)
+    
+    # Benchmark against industry
+    if industry:
+        benchmark = benchmark_against_industry(text, industry)
+        analysis['details']['industry_benchmark'] = benchmark
+        
+        # Add industry-specific recommendations
+        if benchmark['industry_relevance'] < 0.5:
+            recommendation = f"💡 Add more {benchmark['industry']}-specific keywords: {', '.join(benchmark['missing_keywords'][:3])}"
+            analysis['recommendations'].append(recommendation)
+            logger.info(recommendation)
+    
+    # Generate report (without saving to file, as this is server-side)
+    report = generate_report(analysis)
     
     return {
-        "format": file_ext,
-        "size_mb": file_size,
-        "issues": format_issues
+        "analysis": analysis,
+        "report": report,
+        "format_check": format_check
     }
 
-# === Main Function ===
+# === Main Function for CLI Use ===
 def main():
-    print("🔍 ATS Resume Checker v2.0")
+    print("🔍 ATS Resume Checker v2.1")
     print("==========================")
     file_path = input("📄 Enter resume file path (PDF/DOCX): ")
     
@@ -586,40 +743,23 @@ def main():
     # Get industry for benchmarking
     industry = input("🏢 Enter industry for benchmarking (software/finance/marketing/healthcare/data) (optional): ")
     
-    # Extract text from resume
-    print("\nExtracting text from resume...")
-    if file_path.lower().endswith('.pdf'):
-        text = extract_text_from_pdf(file_path)
-    elif file_path.lower().endswith('.docx'):
-        text = extract_text_from_docx(file_path)
-    else:
-        print("❗️ Unsupported file format. Please use PDF or DOCX.")
+    # Run analysis
+    result = analyze_resume(file_path, job_description, industry)
+    
+    if "error" in result:
+        print(result["error"])
         return
     
-    if not text:
-        print("❌ Failed to extract text from the resume.")
-        return
+    # Print the report
+    print(result["report"])
     
-    # Analyze the resume
-    print("Analyzing resume...")
-    analysis = check_ats_compatibility(text, job_description)
-    
-    # Benchmark against industry
-    if industry:
-        benchmark = benchmark_against_industry(text, industry)
-        analysis['details']['industry_benchmark'] = benchmark
-        
-        # Add industry-specific recommendations
-        if benchmark['industry_relevance'] < 0.5:
-            analysis['recommendations'].append(
-                f"💡 Add more {benchmark['industry']}-specific keywords: {', '.join(benchmark['missing_keywords'][:3])}"
-            )
-
-    # Generate and save report
+    # Optionally save the report
     save_report = input("Do you want to save the report to a file? (y/n): ")
-    output_file = None
     if save_report.lower() == 'y':
         output_file = os.path.splitext(file_path)[0] + "_ats_report.txt"
-    
-    generate_report(analysis, output_file)
+        with open(output_file, 'w') as f:
+            f.write(result["report"])
+        print(f"\nReport saved to {output_file}")
 
+if __name__ == "__main__":
+    main()
