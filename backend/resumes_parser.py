@@ -14,6 +14,16 @@ BASE_DIR = "C:/Users/yaswa/OneDrive/Desktop/JOBLENS/datasets/"
 SKILLS_FILE = os.path.join(BASE_DIR, "skills.json")
 EDUCATION_FILE = os.path.join(BASE_DIR, "education.json")
 
+
+import subprocess
+
+try:
+    nlp = spacy.load("en_core_web_sm")
+except OSError:
+    subprocess.run(["python", "-m", "spacy", "download", "en_core_web_sm"])
+    nlp = spacy.load("en_core_web_sm")
+
+
 # Function to load JSON data safely
 def load_json(file_path, key):
     if not os.path.exists(file_path):
