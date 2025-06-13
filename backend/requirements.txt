@@ -5,7 +5,7 @@ pandas==2.3.0
 scikit-learn==1.7.0
 joblib==1.5.1
 nltk==3.9.1
-spacy==3.7.5  # Use a specific version with a pre-built wheel
+spacy==3.7.5
 pdfminer.six==20250506
 PyPDF2==3.0.1
 python-docx==1.1.2
@@ -17,5 +17,4 @@ lxml==5.4.0
 openpyxl==3.1.5
 matplotlib==3.10.3
 seaborn==0.13.2
-# Install the spacy model directly via pip
-en-core-web-sm==3.7.1
+# Removed: en-core-web-sm==3.7.1
