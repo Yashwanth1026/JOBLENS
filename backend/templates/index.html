@@ -521,16 +521,16 @@
 
             try {
                 // Simulate progress for ATS check
-                const atsResponse = await fetch('/ats_check', {
-                    method: 'POST',
-                    body: formData
-                });
-                progressFill.style.width = '50%';
+              const atsResponse = await fetch('https://joblens-api.onrender.com/ats_check', {
+  method: 'POST',
+  body: formData
+});
 
-                // Simulate progress for Predict
-                const predictResponse = await fetch('/predict', {
-                    method: 'POST',
-                    body: formData
+const predictResponse = await fetch('https://joblens-api.onrender.com/predict', {
+  method: 'POST',
+  body: formData
+});
+
                 });
                 progressFill.style.width = '100%';
 
