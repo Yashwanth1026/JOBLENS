@@ -15,6 +15,8 @@ import tempfile
 import traceback
 import subprocess
 import sys
+app = Flask(__name__)
+CORS(app)  
 
 # Configure logging
 logging.basicConfig(
