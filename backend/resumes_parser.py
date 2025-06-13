@@ -4,10 +4,18 @@ import re
 import PyPDF2
 import nltk
 import spacy
+import subprocess
 
-# Download required NLTK and spaCy resources
+# Download required NLTK resources
 nltk.download('punkt', quiet=True)
-nlp = spacy.load("en_core_web_sm")
+
+# Load or download spaCy model
+try:
+    nlp = spacy.load("en_core_web_sm")
+except OSError:
+    subprocess.run(["python", "-m", "spacy", "download", "en_core_web_sm"])
+    nlp = spacy.load("en_core_web_sm")
+
 
 # Define dataset paths
 BASE_DIR = "C:/Users/yaswa/OneDrive/Desktop/JOBLENS/datasets/"
@@ -15,13 +23,6 @@ SKILLS_FILE = os.path.join(BASE_DIR, "skills.json")
 EDUCATION_FILE = os.path.join(BASE_DIR, "education.json")
 
 
-import subprocess
-
-try:
-    nlp = spacy.load("en_core_web_sm")
-except OSError:
-    subprocess.run(["python", "-m", "spacy", "download", "en_core_web_sm"])
-    nlp = spacy.load("en_core_web_sm")
 
 
 # Function to load JSON data safely
