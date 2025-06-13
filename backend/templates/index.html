@@ -405,187 +405,188 @@
     <script src="https://cdn.jsdelivr.net/npm/@popperjs/core@2.11.8/dist/umd/popper.min.js" integrity="sha384-I7E8VVD/ismYTF4hNIPjVp/Zjvgyol6VFvRkX/vR+Vc4jQkC+hVqc2pM8ODewa9r" crossorigin="anonymous"></script>
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.min.js" integrity="sha384-0pUGZvbkm6XF6gxjEnlmuGrJXVbNuzT9qBBavbLwCsOGabYfZo0T0to5eqruptLy" crossorigin="anonymous"></script>
     <script>
-        // Theme Toggle
-        const themeToggle = document.getElementById('themeToggle');
-        themeToggle.addEventListener('click', () => {
-            document.body.classList.toggle('dark-mode');
-            const icon = themeToggle.querySelector('i');
-            if (document.body.classList.contains('dark-mode')) {
-                icon.classList.remove('fa-moon');
-                icon.classList.add('fa-sun');
-                localStorage.setItem('theme', 'dark');
-            } else {
-                icon.classList.remove('fa-sun');
-                icon.classList.add('fa-moon');
-                localStorage.setItem('theme', 'light');
-            }
-        });
-
-        // Load theme from localStorage
-        if (localStorage.getItem('theme') === 'dark') {
-            document.body.classList.add('dark-mode');
-            themeToggle.querySelector('i').classList.replace('fa-moon', 'fa-sun');
+    // Theme Toggle
+    const themeToggle = document.getElementById('themeToggle');
+    themeToggle.addEventListener('click', () => {
+        document.body.classList.toggle('dark-mode');
+        const icon = themeToggle.querySelector('i');
+        if (document.body.classList.contains('dark-mode')) {
+            icon.classList.remove('fa-moon');
+            icon.classList.add('fa-sun');
+            localStorage.setItem('theme', 'dark');
+        } else {
+            icon.classList.remove('fa-sun');
+            icon.classList.add('fa-moon');
+            localStorage.setItem('theme', 'light');
         }
+    });
 
-        // Sticky Navbar on Scroll
-        window.addEventListener('scroll', () => {
-            const navbar = document.querySelector('.navbar');
-            if (window.scrollY > 50) {
-                navbar.classList.add('scrolled');
-            } else {
-                navbar.classList.remove('scrolled');
-            }
-        });
+    // Load theme from localStorage
+    if (localStorage.getItem('theme') === 'dark') {
+        document.body.classList.add('dark-mode');
+        themeToggle.querySelector('i').classList.replace('fa-moon', 'fa-sun');
+    }
 
-        // Smooth Scrolling for Nav Links
-        document.querySelectorAll('a[href^="#"]').forEach(anchor => {
-            anchor.addEventListener('click', function(e) {
-                e.preventDefault();
-                const target = document.querySelector(this.getAttribute('href'));
+    // Sticky Navbar on Scroll
+    window.addEventListener('scroll', () => {
+        const navbar = document.querySelector('.navbar');
+        if (window.scrollY > 50) {
+            navbar.classList.add('scrolled');
+        } else {
+            navbar.classList.remove('scrolled');
+        }
+    });
+
+    // Smooth Scrolling for Nav Links
+    document.querySelectorAll('a[href^="#"]').forEach(anchor => {
+        anchor.addEventListener('click', function(e) {
+            e.preventDefault();
+            const target = document.querySelector(this.getAttribute('href'));
+            if (target) {
                 target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            }
+        });
+    });
+
+    // Drag and Drop Handling
+    const uploadArea = document.getElementById('uploadArea');
+    const resumeInput = document.getElementById('resume');
+    const fileNameDisplay = document.getElementById('fileName');
+
+    uploadArea.addEventListener('dragover', (e) => {
+        e.preventDefault();
+        uploadArea.classList.add('dragover');
+    });
+
+    uploadArea.addEventListener('dragleave', () => {
+        uploadArea.classList.remove('dragover');
+    });
+
+    uploadArea.addEventListener('drop', (e) => {
+        e.preventDefault();
+        uploadArea.classList.remove('dragover');
+        const files = e.dataTransfer.files;
+        if (files.length > 0) {
+            resumeInput.files = files;
+            fileNameDisplay.textContent = files[0].name;
+            gsap.to(fileNameDisplay, { opacity: 1, y: 0, duration: 0.5 });
+        }
+    });
+
+    resumeInput.addEventListener('change', () => {
+        if (resumeInput.files.length > 0) {
+            fileNameDisplay.textContent = resumeInput.files[0].name;
+            gsap.to(fileNameDisplay, { opacity: 1, y: 0, duration: 0.5 });
+        } else {
+            fileNameDisplay.textContent = 'No file selected';
+        }
+    });
+
+    // Form Submission
+    document.getElementById('resumeForm').addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const form = e.target;
+        const formData = new FormData(form);
+        const resumeError = document.getElementById('resumeError');
+        const submitBtn = document.getElementById('submitBtn');
+        const submitText = document.getElementById('submitText');
+        const loadingSpinner = document.getElementById('loadingSpinner');
+        const progressBar = document.getElementById('progressBar');
+        const progressFill = document.getElementById('progressFill');
+
+        // Validate file
+        if (!resumeInput.files[0]) {
+            resumeError.textContent = 'Please select a resume file.';
+            resumeError.classList.remove('d-none');
+            showModal('Error', 'Please select a resume file to proceed.');
+            return;
+        }
+        if (!resumeInput.files[0].name.match(/\.(pdf|docx)$/i)) {
+            resumeError.textContent = 'Only PDF and DOCX files are supported.';
+            resumeError.classList.remove('d-none');
+            showModal('Error', 'Only PDF and DOCX files are supported.');
+            return;
+        }
+        resumeError.classList.add('d-none');
+
+        // Show loading state
+        submitBtn.disabled = true;
+        submitText.textContent = 'Analyzing...';
+        loadingSpinner.classList.remove('d-none');
+        progressBar.classList.remove('d-none');
+        let progress = 0;
+        const progressInterval = setInterval(() => {
+            progress += 10;
+            progressFill.style.width = `${progress}%`;
+            if (progress >= 90) clearInterval(progressInterval);
+        }, 500);
+
+        try {
+            const atsResponse = await fetch('https://joblens-8urz.onrender.com/ats_check', {
+                method: 'POST',
+                body: formData
             });
-        });
 
-        // Drag and Drop Handling
-        const uploadArea = document.getElementById('uploadArea');
-        const resumeInput = document.getElementById('resume');
-        const fileNameDisplay = document.getElementById('fileName');
+            const predictResponse = await fetch('https://joblens-8urz.onrender.com/predict', {
+                method: 'POST',
+                body: formData
+            });
 
-        uploadArea.addEventListener('dragover', (e) => {
-            e.preventDefault();
-            uploadArea.classList.add('dragover');
-        });
+            progressFill.style.width = '100%';
 
-        uploadArea.addEventListener('dragleave', () => {
-            uploadArea.classList.remove('dragover');
-        });
+            const atsResult = await atsResponse.json();
+            const predictResult = await predictResponse.json();
 
-        uploadArea.addEventListener('drop', (e) => {
-            e.preventDefault();
-            uploadArea.classList.remove('dragover');
-            const files = e.dataTransfer.files;
-            if (files.length > 0) {
-                resumeInput.files = files;
-                fileNameDisplay.textContent = files[0].name;
-                gsap.to(fileNameDisplay, { opacity: 1, y: 0, duration: 0.5 });
-            }
-        });
-
-        resumeInput.addEventListener('change', () => {
-            if (resumeInput.files.length > 0) {
-                fileNameDisplay.textContent = resumeInput.files[0].name;
-                gsap.to(fileNameDisplay, { opacity: 1, y: 0, duration: 0.5 });
+            if (atsResponse.ok && predictResponse.ok) {
+                sessionStorage.setItem('atsResult', JSON.stringify(atsResult));
+                sessionStorage.setItem('predictResult', JSON.stringify(predictResult));
+                window.location.href = '/results.html';
             } else {
-                fileNameDisplay.textContent = 'No file selected';
+                throw new Error(atsResult.error || predictResult.error || 'Analysis failed');
             }
-        });
-
-        // Form Submission
-        document.getElementById('resumeForm').addEventListener('submit', async (e) => {
-            e.preventDefault();
-            const form = e.target;
-            const formData = new FormData(form);
-            const resumeError = document.getElementById('resumeError');
-            const submitBtn = document.getElementById('submitBtn');
-            const submitText = document.getElementById('submitText');
-            const loadingSpinner = document.getElementById('loadingSpinner');
-            const progressBar = document.getElementById('progressBar');
-            const progressFill = document.getElementById('progressFill');
-
-            // Validate file
-            if (!resumeInput.files[0]) {
-                resumeError.textContent = 'Please select a resume file.';
-                resumeError.classList.remove('d-none');
-                showModal('Error', 'Please select a resume file to proceed.');
-                return;
-            }
-            if (!resumeInput.files[0].name.match(/\.(pdf|docx)$/i)) {
-                resumeError.textContent = 'Only PDF and DOCX files are supported.';
-                resumeError.classList.remove('d-none');
-                showModal('Error', 'Only PDF and DOCX files are supported.');
-                return;
-            }
-            resumeError.classList.add('d-none');
-
-            // Show loading state
-            submitBtn.disabled = true;
-            submitText.textContent = 'Analyzing...';
-            loadingSpinner.classList.remove('d-none');
-            progressBar.classList.remove('d-none');
-            let progress = 0;
-            const progressInterval = setInterval(() => {
-                progress += 10;
-                progressFill.style.width = `${progress}%`;
-                if (progress >= 90) clearInterval(progressInterval);
-            }, 500);
-
-            try {
-                // Simulate progress for ATS check
-              const atsResponse = await fetch('https://joblens-api.onrender.com/ats_check', {
-  method: 'POST',
-  body: formData
-});
-
-const predictResponse = await fetch('https://joblens-api.onrender.com/predict', {
-  method: 'POST',
-  body: formData
-});
-
-                });
-                progressFill.style.width = '100%';
-
-                const atsResult = await atsResponse.json();
-                const predictResult = await predictResponse.json();
-
-                if (atsResponse.ok && predictResponse.ok) {
-                    sessionStorage.setItem('atsResult', JSON.stringify(atsResult));
-                    sessionStorage.setItem('predictResult', JSON.stringify(predictResult));
-                    window.location.href = '/results.html';
-                } else {
-                    throw new Error(atsResult.error || predictResult.error || 'Analysis failed');
-                }
-            } catch (error) {
-                showModal('Error', `An error occurred: ${error.message}`);
-            } finally {
-                clearInterval(progressInterval);
-                progressBar.classList.add('d-none');
-                submitBtn.disabled = false;
-                submitText.textContent = 'Analyze Resume';
-                loadingSpinner.classList.add('d-none');
-                progressFill.style.width = '0%';
-            }
-        });
-
-        // Modal Helper Function
-        function showModal(title, message) {
-            const modal = new bootstrap.Modal(document.getElementById('infoModal'));
-            document.getElementById('infoModalLabel').textContent = title;
-            document.getElementById('modalBody').textContent = message;
-            modal.show();
-            gsap.from('.modal-content', { opacity: 0, y: -50, duration: 0.5, ease: 'power2.out' });
+        } catch (error) {
+            showModal('Error', `An error occurred: ${error.message}`);
+        } finally {
+            clearInterval(progressInterval);
+            progressBar.classList.add('d-none');
+            submitBtn.disabled = false;
+            submitText.textContent = 'Analyze Resume';
+            loadingSpinner.classList.add('d-none');
+            progressFill.style.width = '0%';
         }
+    });
 
-        // Title Typing Animation
-        const titleMain = document.getElementById('titleMain');
-        const titleSub = document.getElementById('titleSub');
-        const text = "JobLens AI";
-        let i = 0;
+    // Modal Helper Function
+    function showModal(title, message) {
+        const modal = new bootstrap.Modal(document.getElementById('infoModal'));
+        document.getElementById('infoModalLabel').textContent = title;
+        document.getElementById('modalBody').textContent = message;
+        modal.show();
+        gsap.from('.modal-content', { opacity: 0, y: -50, duration: 0.5, ease: 'power2.out' });
+    }
 
-        function typeEffect() {
-            if (i < text.length) {
-                titleMain.textContent += text.charAt(i);
-                i++;
-                setTimeout(typeEffect, 100);
-            } else {
-                gsap.to(titleSub, { opacity: 1, duration: 1, ease: 'power2.in' });
-            }
+    // Title Typing Animation
+    const titleMain = document.getElementById('titleMain');
+    const titleSub = document.getElementById('titleSub');
+    const text = "JobLens AI";
+    let i = 0;
+
+    function typeEffect() {
+        if (i < text.length) {
+            titleMain.textContent += text.charAt(i);
+            i++;
+            setTimeout(typeEffect, 100);
+        } else {
+            gsap.to(titleSub, { opacity: 1, duration: 1, ease: 'power2.in' });
         }
+    }
 
-        // Initial Animations
-        gsap.from('.navbar', { opacity: 0, y: -50, duration: 1, ease: 'power2.out' });
-        window.onload = () => {
-            typeEffect();
-        };
-    </script>
+    // Initial Animations
+    gsap.from('.navbar', { opacity: 0, y: -50, duration: 1, ease: 'power2.out' });
+    window.onload = () => {
+        typeEffect();
+    };
+</script>
+
 </body>
 </html>
