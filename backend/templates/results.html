@@ -328,223 +328,209 @@
     </footer>
 
     <script>
-        function displayResults() {
-            const atsResult = JSON.parse(sessionStorage.getItem('atsResult'));
-            const predictResult = JSON.parse(sessionStorage.getItem('predictResult'));
-            const errorMessage = document.getElementById('errorMessage');
-            const errorText = document.getElementById('errorText');
+    function displayResults() {
+        const atsResult = JSON.parse(sessionStorage.getItem('atsResult'));
+        const predictResult = JSON.parse(sessionStorage.getItem('predictResult'));
+        const errorMessage = document.getElementById('errorMessage');
+        const errorText = document.getElementById('errorText');
 
-            if (!atsResult || !predictResult) {
-                errorText.textContent = 'No analysis results found. Please upload a resume and try again.';
-                errorMessage.classList.remove('d-none');
-                return;
-            }
-
-            if (atsResult.error || predictResult.error) {
-                errorText.textContent = atsResult.error || predictResult.error || 'An error occurred during analysis. Please try again.';
-                errorMessage.classList.remove('d-none');
-                return;
-            }
-
-            // ATS Compatibility Section
-            const atsSection = document.getElementById('atsSection');
-            const scoreCircle = document.getElementById('scoreCircle');
-            const scoreText = document.getElementById('scoreText');
-            const fileFormat = document.getElementById('fileFormat');
-            const fileIssues = document.getElementById('fileIssues');
-            const warningsList = document.getElementById('warningsList');
-            const recommendationsList = document.getElementById('recommendationsList');
-            const detailsContent = document.getElementById('detailsContent');
-
-            atsSection.classList.remove('d-none');
-            const score = atsResult.score || 0;
-            const scoreAngle = (score / 100) * 360; // Convert percentage to degrees for conic-gradient
-            scoreCircle.style.setProperty('--score-angle', `${scoreAngle}deg`);
-            scoreCircle.innerHTML = `<span>${score}%</span>`;
-            scoreCircle.classList.add(score >= 80 ? 'score-high' : score >= 60 ? 'score-medium' : 'score-low');
-            scoreText.textContent = `${score}%`;
-
-            // Animate score circle and text
-            gsap.from(scoreCircle, { scale: 0, duration: 1, ease: 'elastic.out(1, 0.5)' });
-            gsap.from(scoreText, { opacity: 0, y: 20, duration: 1, delay: 0.5, ease: 'power2.out' });
-
-            fileFormat.textContent = `Format: ${atsResult.file_format.format || 'Unknown'}, Size: ${(atsResult.file_format.size_mb || 0).toFixed(2)} MB`;
-            fileIssues.textContent = atsResult.file_format.issues?.length ? `Issues: ${atsResult.file_format.issues.join(', ')}` : 'No issues detected';
-
-            warningsList.innerHTML = atsResult.warnings?.length ? atsResult.warnings.map(w => `<li>${w}</li>`).join('') : '<li>No warnings</li>';
-            recommendationsList.innerHTML = atsResult.recommendations?.length ? atsResult.recommendations.map(r => `<li>${r}</li>`).join('') : '<li>No recommendations</li>';
-
-            // Detailed Analysis
-            if (atsResult.details) {
-                let detailsHtml = '';
-                if (atsResult.details.structure) {
-                    let structureDetails = `<p><strong>Structure:</strong> `;
-                    if (atsResult.details.structure.found_sections?.length) {
-                        structureDetails += `Found: ${atsResult.details.structure.found_sections.join(', ')}`;
-                    }
-                    if (atsResult.details.structure.missing_sections?.length) {
-                        structureDetails += `${atsResult.details.structure.found_sections?.length ? '; ' : ''}Missing: ${atsResult.details.structure.missing_sections.join(', ')}`;
-                    }
-                    if (atsResult.details.structure.section_order?.length) {
-                        structureDetails += `${(atsResult.details.structure.found_sections?.length || atsResult.details.structure.missing_sections?.length) ? '; ' : ''}Order: ${atsResult.details.structure.section_order.join(' → ')}`;
-                    }
-                    detailsHtml += structureDetails + '</p>';
-                }
-                if (atsResult.details.content) {
-                    let contentDetails = `<p><strong>Content:</strong> Word Count: ${atsResult.details.content.word_count || 'N/A'}`;
-                    if (atsResult.details.content.skills?.length) {
-                        contentDetails += `; Skills: ${atsResult.details.content.skills.slice(0, 5).join(', ')}${atsResult.details.content.skills.length > 5 ? '...' : ''}`;
-                    }
-                    detailsHtml += contentDetails + '</p>';
-                }
-                if (atsResult.details.keywords?.job_description_similarity) {
-                    detailsHtml += `<p><strong>Keywords:</strong> Job Description Similarity: ${atsResult.details.keywords.job_description_similarity}%</p>`;
-                }
-                if (atsResult.details.industry_benchmark) {
-                    let benchmarkDetails = `<p><strong>Industry Benchmark:</strong> Industry: ${atsResult.details.industry_benchmark.industry || 'Unknown'}; Relevance: ${(atsResult.details.industry_benchmark.industry_relevance * 100 || 0).toFixed(2)}%`;
-                    if (atsResult.details.industry_benchmark.missing_keywords?.length) {
-                        benchmarkDetails += `; Missing Keywords: ${atsResult.details.industry_benchmark.missing_keywords.slice(0, 3).join(', ')}${atsResult.details.industry_benchmark.missing_keywords.length > 3 ? '...' : ''}`;
-                    }
-                    detailsHtml += benchmarkDetails + '</p>';
-                }
-                detailsContent.innerHTML = detailsHtml || '<p>No detailed analysis available.</p>';
-            } else {
-                detailsContent.innerHTML = '<p>No detailed analysis available.</p>';
-            }
-
-            // Resume Details Section
-            const resumeSection = document.getElementById('resumeSection');
-            const resumeName = document.getElementById('resumeName');
-            const resumeEmail = document.getElementById('resumeEmail');
-            const resumePhone = document.getElementById('resumePhone');
-            const resumeSkills = document.getElementById('resumeSkills');
-            const resumeEducation = document.getElementById('resumeEducation');
-            const resumeExperience = document.getElementById('resumeExperience');
-
-            resumeSection.classList.remove('d-none');
-            const resumeData = predictResult['Resume Data'] || {};
-            resumeName.textContent = resumeData.Name || 'Not Found';
-            resumeEmail.textContent = resumeData.Email || 'Not Found';
-            resumePhone.textContent = resumeData.Phone || 'Not Found';
-            resumeSkills.textContent = resumeData.Skills || 'Not Found';
-
-            // Education Extraction
-            if (Array.isArray(resumeData.Education) && resumeData.Education.length && resumeData.Education.every(item => item !== 'Not Found')) {
-                resumeEducation.innerHTML = resumeData.Education.map(e => `<li>${e}</li>`).join('');
-            } else {
-                resumeEducation.innerHTML = '<li>Not Found</li>';
-            }
-
-            if (Array.isArray(resumeData.Experience) && resumeData.Experience.length && resumeData.Experience.every(item => item !== 'Not Found')) {
-                resumeExperience.innerHTML = resumeData.Experience.map(exp => {
-                    if (typeof exp === 'object' && exp !== null) {
-                        return `
-                            <div class="border-l-4 border-primary pl-4">
-                                <p class="fw-semibold">${exp['Job Title'] || 'Untitled'} at ${exp.Company || 'Unknown'}</p>
-                                <p class="text-sm text-muted">${exp.Duration || ''} ${exp.Location ? ' | ' + exp.Location : ''}</p>
-                                <ul class="list-disc pl-5 mt-1">
-                                    ${Array.isArray(exp['Key Responsibilities']) 
-                                        ? exp['Key Responsibilities'].map(r => `<li>${r}</li>`).join('')
-                                        : '<li>No responsibilities listed</li>'}
-                                </ul>
-                            </div>
-                        `;
-                    }
-                    return `<div>${exp}</div>`;
-                }).join('');
-            } else {
-                resumeExperience.textContent = 'Not Found';
-            }
-
-            // Job Predictions Section
-            const predictionsSection = document.getElementById('predictionsSection');
-            const categoryPrediction = document.getElementById('categoryPrediction');
-            const jobPrediction = document.getElementById('jobPrediction');
-            const categoryProbs = document.getElementById('categoryProbs');
-            const jobProbs = document.getElementById('jobProbs');
-
-            predictionsSection.classList.remove('d-none');
-            const predictions = predictResult.Predictions || {};
-            categoryPrediction.textContent = predictions.Categorization || 'Unknown';
-            jobPrediction.textContent = predictions['Job Recommendation'] || 'Unknown';
-
-            if (predictions['Category Probabilities']) {
-                categoryProbs.innerHTML = '<p class="text-sm fw-medium text-secondary mt-2">Confidence Scores:</p>' + 
-                    Object.entries(predictions['Category Probabilities'])
-                        .sort(([, a], [, b]) => b - a)
-                        .slice(0, 5)
-                        .map(([cat, prob], index) => `
-                            <div class="mb-2">
-                                <small>${cat}: ${prob}%</small>
-                                <div class="progress">
-                                    <div class="progress-bar" style="width: 0%" data-width="${prob}"></div>
-                                </div>
-                            </div>
-                        `).join('');
-                // Animate progress bars
-                document.querySelectorAll('#categoryProbs .progress-bar').forEach((bar, index) => {
-                    gsap.to(bar, {
-                        width: bar.getAttribute('data-width') + '%',
-                        duration: 1,
-                        delay: index * 0.2,
-                        ease: 'power2.out'
-                    });
-                });
-            } else {
-                categoryProbs.innerHTML = '<p class="text-sm text-muted">No probability data available.</p>';
-            }
-
-            if (predictions['Job Recommendation Probabilities']) {
-                jobProbs.innerHTML = '<p class="text-sm fw-medium text-secondary mt-2">Confidence Scores:</p>' + 
-                    Object.entries(predictions['Job Recommendation Probabilities'])
-                        .sort(([, a], [, b]) => b - a)
-                        .slice(0, 5)
-                        .map(([job, prob], index) => `
-                            <div class="mb-2">
-                                <small>${job}: ${prob}%</small>
-                                <div class="progress">
-                                    <div class="progress-bar" style="width: 0%" data-width="${prob}"></div>
-                                </div>
-                            </div>
-                        `).join('');
-                // Animate progress bars
-                document.querySelectorAll('#jobProbs .progress-bar').forEach((bar, index) => {
-                    gsap.to(bar, {
-                        width: bar.getAttribute('data-width') + '%',
-                        duration: 1,
-                        delay: index * 0.2,
-                        ease: 'power2.out'
-                    });
-                });
-            } else {
-                jobProbs.innerHTML = '<p class="text-sm text-muted">No probability data available.</p>';
-            }
+        if (!atsResult || !predictResult) {
+            errorText.textContent = 'No analysis results found. Please upload a resume and try again.';
+            errorMessage.classList.remove('d-none');
+            return;
         }
 
-        // Theme Toggle
-        const themeToggle = document.getElementById('themeToggle');
-        themeToggle.addEventListener('click', () => {
-            document.body.classList.toggle('dark-mode');
-            const icon = themeToggle.querySelector('i');
-            if (document.body.classList.contains('dark-mode')) {
-                icon.classList.remove('fa-moon');
-                icon.classList.add('fa-sun');
-                localStorage.setItem('theme', 'dark');
-            } else {
-                icon.classList.remove('fa-sun');
-                icon.classList.add('fa-moon');
-                localStorage.setItem('theme', 'light');
-            }
-        });
-
-        // Load theme from localStorage
-        if (localStorage.getItem('theme') === 'dark') {
-            document.body.classList.add('dark-mode');
-            themeToggle.querySelector('i').classList.replace('fa-moon', 'fa-sun');
+        if (atsResult.error || predictResult.error) {
+            errorText.textContent = atsResult.error || predictResult.error || 'An error occurred during analysis. Please try again.';
+            errorMessage.classList.remove('d-none');
+            return;
         }
 
-        // Run display on page load
-        window.onload = displayResults;
-    </script>
+        // ATS Compatibility Section
+        const atsSection = document.getElementById('atsSection');
+        const scoreCircle = document.getElementById('scoreCircle');
+        const scoreText = document.getElementById('scoreText');
+        const fileFormat = document.getElementById('fileFormat');
+        const fileIssues = document.getElementById('fileIssues');
+        const warningsList = document.getElementById('warningsList');
+        const recommendationsList = document.getElementById('recommendationsList');
+        const detailsContent = document.getElementById('detailsContent');
+
+        atsSection.classList.remove('d-none');
+        const score = atsResult.score || 0;
+        const scoreAngle = (score / 100) * 360;
+        scoreCircle.style.setProperty('--score-angle', `${scoreAngle}deg`);
+        scoreCircle.innerHTML = `<span>${score}%</span>`;
+        scoreCircle.classList.add(score >= 80 ? 'score-high' : score >= 60 ? 'score-medium' : 'score-low');
+        scoreText.textContent = `${score}%`;
+        gsap.from(scoreCircle, { scale: 0, duration: 1, ease: 'elastic.out(1, 0.5)' });
+        gsap.from(scoreText, { opacity: 0, y: 20, duration: 1, delay: 0.5, ease: 'power2.out' });
+
+        fileFormat.textContent = `Format: ${atsResult.file_format.format || 'Unknown'}, Size: ${(atsResult.file_format.size_mb || 0).toFixed(2)} MB`;
+        fileIssues.textContent = atsResult.file_format.issues?.length ? `Issues: ${atsResult.file_format.issues.join(', ')}` : 'No issues detected';
+        warningsList.innerHTML = atsResult.warnings?.length ? atsResult.warnings.map(w => `<li>${w}</li>`).join('') : '<li>No warnings</li>';
+        recommendationsList.innerHTML = atsResult.recommendations?.length ? atsResult.recommendations.map(r => `<li>${r}</li>`).join('') : '<li>No recommendations</li>';
+
+        let detailsHtml = '';
+        const details = atsResult.details || {};
+        if (details.structure) {
+            let s = `<p><strong>Structure:</strong> `;
+            if (details.structure.found_sections?.length) s += `Found: ${details.structure.found_sections.join(', ')}`;
+            if (details.structure.missing_sections?.length) s += `${details.structure.found_sections?.length ? '; ' : ''}Missing: ${details.structure.missing_sections.join(', ')}`;
+            if (details.structure.section_order?.length) s += `; Order: ${details.structure.section_order.join(' → ')}`;
+            detailsHtml += s + '</p>';
+        }
+        if (details.content) {
+            let c = `<p><strong>Content:</strong> Word Count: ${details.content.word_count || 'N/A'}`;
+            if (details.content.skills?.length) c += `; Skills: ${details.content.skills.slice(0, 5).join(', ')}${details.content.skills.length > 5 ? '...' : ''}`;
+            detailsHtml += c + '</p>';
+        }
+        if (details.keywords?.job_description_similarity) {
+            detailsHtml += `<p><strong>Keywords:</strong> Job Description Similarity: ${details.keywords.job_description_similarity}%</p>`;
+        }
+        if (details.industry_benchmark) {
+            let i = `<p><strong>Industry Benchmark:</strong> Industry: ${details.industry_benchmark.industry || 'Unknown'}; Relevance: ${(details.industry_benchmark.industry_relevance * 100 || 0).toFixed(2)}%`;
+            if (details.industry_benchmark.missing_keywords?.length) {
+                i += `; Missing Keywords: ${details.industry_benchmark.missing_keywords.slice(0, 3).join(', ')}${details.industry_benchmark.missing_keywords.length > 3 ? '...' : ''}`;
+            }
+            detailsHtml += i + '</p>';
+        }
+        detailsContent.innerHTML = detailsHtml || '<p>No detailed analysis available.</p>';
+
+        // Resume Details
+        const resumeSection = document.getElementById('resumeSection');
+        const resumeName = document.getElementById('resumeName');
+        const resumeEmail = document.getElementById('resumeEmail');
+        const resumePhone = document.getElementById('resumePhone');
+        const resumeSkills = document.getElementById('resumeSkills');
+        const resumeEducation = document.getElementById('resumeEducation');
+        const resumeExperience = document.getElementById('resumeExperience');
+
+        resumeSection.classList.remove('d-none');
+        const resumeData = predictResult['Resume Data'] || {};
+        resumeName.textContent = resumeData.Name || 'Not Found';
+        resumeEmail.textContent = resumeData.Email || 'Not Found';
+        resumePhone.textContent = resumeData.Phone || resumeData['Contact Number'] || 'Not Found';
+        resumeSkills.textContent = Array.isArray(resumeData.Skills) && resumeData.Skills.length
+            ? resumeData.Skills.join(', ')
+            : 'Not Found';
+
+        // Education
+        if (Array.isArray(resumeData.Education) && resumeData.Education.length && resumeData.Education.every(item => item !== 'Not Found')) {
+            resumeEducation.innerHTML = resumeData.Education.map(e => `<li>${e}</li>`).join('');
+        } else {
+            resumeEducation.innerHTML = '<li>Not Found</li>';
+        }
+
+        // Experience
+        if (Array.isArray(resumeData.Experience) && resumeData.Experience.length && resumeData.Experience.every(item => item !== 'Not Found')) {
+            resumeExperience.innerHTML = resumeData.Experience.map(exp => {
+                if (typeof exp === 'object' && exp !== null) {
+                    return `
+                        <div class="border-l-4 border-primary pl-4">
+                            <p class="fw-semibold">${exp['Job Title'] || 'Untitled'} at ${exp.Company || 'Unknown'}</p>
+                            <p class="text-sm text-muted">${exp.Duration || ''} ${exp.Location ? ' | ' + exp.Location : ''}</p>
+                            <ul class="list-disc pl-5 mt-1">
+                                ${Array.isArray(exp['Key Responsibilities']) 
+                                    ? exp['Key Responsibilities'].map(r => `<li>${r}</li>`).join('')
+                                    : '<li>No responsibilities listed</li>'}
+                            </ul>
+                        </div>
+                    `;
+                }
+                return `<div>${exp}</div>`;
+            }).join('');
+        } else {
+            resumeExperience.textContent = 'Not Found';
+        }
+
+        // Prediction Section
+        const predictionsSection = document.getElementById('predictionsSection');
+        const categoryPrediction = document.getElementById('categoryPrediction');
+        const jobPrediction = document.getElementById('jobPrediction');
+        const categoryProbs = document.getElementById('categoryProbs');
+        const jobProbs = document.getElementById('jobProbs');
+
+        predictionsSection.classList.remove('d-none');
+        const predictions = predictResult.Predictions || {};
+        categoryPrediction.textContent = predictions.Categorization || 'Unknown';
+        jobPrediction.textContent = predictions['Job Recommendation'] || 'Unknown';
+
+        if (predictions['Category Probabilities']) {
+            categoryProbs.innerHTML = '<p class="text-sm fw-medium text-secondary mt-2">Confidence Scores:</p>' + 
+                Object.entries(predictions['Category Probabilities'])
+                    .sort(([, a], [, b]) => b - a)
+                    .slice(0, 5)
+                    .map(([cat, prob], index) => `
+                        <div class="mb-2">
+                            <small>${cat}: ${prob}%</small>
+                            <div class="progress">
+                                <div class="progress-bar" style="width: 0%" data-width="${prob}"></div>
+                            </div>
+                        </div>
+                    `).join('');
+            document.querySelectorAll('#categoryProbs .progress-bar').forEach((bar, index) => {
+                gsap.to(bar, {
+                    width: bar.getAttribute('data-width') + '%',
+                    duration: 1,
+                    delay: index * 0.2,
+                    ease: 'power2.out'
+                });
+            });
+        } else {
+            categoryProbs.innerHTML = '<p class="text-sm text-muted">No probability data available.</p>';
+        }
+
+        if (predictions['Job Recommendation Probabilities']) {
+            jobProbs.innerHTML = '<p class="text-sm fw-medium text-secondary mt-2">Confidence Scores:</p>' + 
+                Object.entries(predictions['Job Recommendation Probabilities'])
+                    .sort(([, a], [, b]) => b - a)
+                    .slice(0, 5)
+                    .map(([job, prob], index) => `
+                        <div class="mb-2">
+                            <small>${job}: ${prob}%</small>
+                            <div class="progress">
+                                <div class="progress-bar" style="width: 0%" data-width="${prob}"></div>
+                            </div>
+                        </div>
+                    `).join('');
+            document.querySelectorAll('#jobProbs .progress-bar').forEach((bar, index) => {
+                gsap.to(bar, {
+                    width: bar.getAttribute('data-width') + '%',
+                    duration: 1,
+                    delay: index * 0.2,
+                    ease: 'power2.out'
+                });
+            });
+        } else {
+            jobProbs.innerHTML = '<p class="text-sm text-muted">No probability data available.</p>';
+        }
+    }
+
+    // Theme Toggle
+    const themeToggle = document.getElementById('themeToggle');
+    themeToggle.addEventListener('click', () => {
+        document.body.classList.toggle('dark-mode');
+        const icon = themeToggle.querySelector('i');
+        if (document.body.classList.contains('dark-mode')) {
+            icon.classList.remove('fa-moon');
+            icon.classList.add('fa-sun');
+            localStorage.setItem('theme', 'dark');
+        } else {
+            icon.classList.remove('fa-sun');
+            icon.classList.add('fa-moon');
+            localStorage.setItem('theme', 'light');
+        }
+    });
+
+    if (localStorage.getItem('theme') === 'dark') {
+        document.body.classList.add('dark-mode');
+        themeToggle.querySelector('i').classList.replace('fa-moon', 'fa-sun');
+    }
+
+    // Run display on page load
+    window.onload = displayResults;
+</script>
+
 </body>
 </html>
