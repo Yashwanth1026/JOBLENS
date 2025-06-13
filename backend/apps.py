@@ -1,7 +1,8 @@
-from flask import Flask, request, jsonify, render_template
+import logging
 import os
 import joblib
 import numpy as np
+from flask import Flask, request, jsonify, render_template
 from werkzeug.utils import secure_filename
 from flask_cors import CORS
 from resumes_parser import extract_resume_details
@@ -11,18 +12,33 @@ from sklearn.feature_extraction.text import TfidfVectorizer
 import nltk
 from ats_checker import check_ats_compatibility, extract_text_from_pdf, extract_text_from_docx, benchmark_against_industry, check_file_format
 import tempfile
+import traceback
+
+# Configure logging
+logging.basicConfig(
+    level=logging.DEBUG,
+    format='%(asctime)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.StreamHandler(),
+        logging.FileHandler('app.log')
+    ]
+)
+logger = logging.getLogger(__name__)
 
 # Download necessary NLTK resources
-nltk.download('punkt')
-nltk.download('stopwords')
-nltk.download('wordnet')
+try:
+    nltk.download('punkt', quiet=True)
+    nltk.download('stopwords', quiet=True)
+    nltk.download('wordnet', quiet=True)
+except Exception as e:
+    logger.error(f"Failed to download NLTK resources: {str(e)}")
 
 from nltk.stem import WordNetLemmatizer
 from nltk.corpus import stopwords
 
 app = Flask(__name__)
-# Enable CORS for all routes to work with React
-CORS(app)
+# Enable CORS explicitly for localhost development
+CORS(app, resources={r"/*": {"origins": ["http://localhost:5000", "http://127.0.0.1:5000"]}})
 
 # Initialize lemmatizer and stopwords
 lemmatizer = WordNetLemmatizer()
@@ -31,95 +47,82 @@ stop_words = set(stopwords.words('english'))
 def extract_phone_number(text):
     """Extract phone number from text using regex patterns"""
     if not text:
+        logger.warning("No text provided for phone number extraction")
         return "Not Found"
-
-    # Define various phone number patterns
+        
     patterns = [
-        r'\+?\d{1,3}[-.\s]?\(?\d{1,3}\)?[-.\s]?\d{1,4}[-.\s]?\d{4}',  # International format
-        r'\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4}',  # US format (xxx) xxx-xxxx
-        r'\d{3}[-.\s]?\d{3}[-.\s]?\d{4}',  # Simple format xxx-xxx-xxxx
-        r'\d{10}',  # Just 10 digits
-        r'\+?\d{1,3}[-.\s]?\d{9,10}'  # International with country code
+        r'\+?\d{1,3}[-.\s]?\(?\d{1,3}\)?[-.\s]?\d{1,4}[-.\s]?\d{4}',
+        r'\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4}',
+        r'\d{3}[-.\s]?\d{3}[-.\s]?\d{4}',
+        r'\d{10}',
+        r'\+?\d{1,3}[-.\s]?\d{9,10}'
     ]
-
-    # Try each pattern
+    
     for pattern in patterns:
         matches = re.findall(pattern, text)
         if matches:
+            logger.debug(f"Phone number found: {matches[0]}")
             return matches[0]
-
+    
+    logger.debug("No phone number found in text")
     return "Not Found"
 
 def cleanResume(txt):
     """Enhanced text cleaning function with lemmatization and improved regex"""
     if not txt:
+        logger.warning("No text provided for cleaning")
         return ""
-
-    # If txt is a list, convert it to string first
+    
     if isinstance(txt, list):
         txt = " ".join(str(item) for item in txt)
-
-    # Convert to lowercase
+        
     cleanText = txt.lower()
-
-    # Remove URLs, email addresses, and social media handles
     cleanText = re.sub(r'http\S+', ' ', cleanText)
     cleanText = re.sub(r'www\.\S+', ' ', cleanText)
     cleanText = re.sub(r'[\w\.-]+@[\w\.-]+', ' ', cleanText)
     cleanText = re.sub(r'@\S+', ' ', cleanText)
-
-    # Remove special characters and numbers
     cleanText = re.sub(r'[^\w\s]', ' ', cleanText)
     cleanText = re.sub(r'\d+', ' ', cleanText)
-
-    # Remove extra whitespaces
     cleanText = re.sub(r'\s+', ' ', cleanText).strip()
-
-    # Simple word tokenization without using nltk.word_tokenize
+    
     words = cleanText.split()
-
-    # Filter and lemmatize words
     filtered_words = []
     for word in words:
         if word not in stop_words and len(word) > 2:
             try:
                 lemma = lemmatizer.lemmatize(word)
                 filtered_words.append(lemma)
-            except:
+            except Exception as e:
+                logger.warning(f"Error lemmatizing word '{word}': {str(e)}")
                 filtered_words.append(word)
-
+    
     return ' '.join(filtered_words)
 
 def extract_key_features(resume_data):
     """Extract and weight important sections from resume data"""
+    logger.debug("Extracting key features from resume data")
     features = {}
-
-    # Get raw text as base
+    
     raw_text = resume_data.get("Raw Text", "")
-
-    # Convert skills to string regardless of type
+    
     skills = resume_data.get("Skills", [])
     if isinstance(skills, list):
         features['skills'] = " ".join(str(skill) for skill in skills)
     else:
         features['skills'] = str(skills)
-
-    # Extract other sections with type checking
+    
     for key in ["Education", "Projects", "Certifications"]:
         value = resume_data.get(key, "")
         if isinstance(value, list):
             features[key.lower()] = " ".join(str(item) for item in value)
         else:
             features[key.lower()] = str(value)
-
-    # Handle Experience (now a list of dictionaries)
+    
     experience = resume_data.get("Experience", [])
     if isinstance(experience, list) and experience and experience != ["Not Found"]:
-        # Extract relevant text from each experience entry
         experience_text = []
         for exp in experience:
             if isinstance(exp, dict):
-                # Combine Job Title, Company, and Key Responsibilities
                 exp_text = f"{exp.get('Job Title', '')} {exp.get('Company', '')}"
                 responsibilities = exp.get('Key Responsibilities', [])
                 if responsibilities:
@@ -129,29 +132,20 @@ def extract_key_features(resume_data):
     else:
         features['experience'] = ""
 
-    # Clean each feature with error handling
     for key in features:
         try:
             features[key] = cleanResume(features[key])
         except Exception as e:
-            print(f"Warning: Error cleaning {key}: {str(e)}")
+            logger.warning(f"Error cleaning feature '{key}': {str(e)}")
             features[key] = ""
-
-    # Create weighted feature text with explicit string concatenation
+    
     weighted_text = ""
-
-    # Add skills with triple weight
     weighted_text += (features['skills'] + " ") * 3
-
-    # Add experience with double weight
     weighted_text += (features['experience'] + " ") * 2
-
-    # Add other sections
     weighted_text += features['education'] + " "
     weighted_text += features['projects'] + " " if 'projects' in features else ""
     weighted_text += features['certifications'] + " " if 'certifications' in features else ""
-
-    # Add cleaned raw text if weighted text is too short
+    
     if len(weighted_text.strip()) < 100:
         try:
             if isinstance(raw_text, list):
@@ -159,11 +153,12 @@ def extract_key_features(resume_data):
             cleaned_raw = cleanResume(raw_text)
             weighted_text += " " + cleaned_raw
         except Exception as e:
-            print(f"Warning: Error cleaning raw text: {str(e)}")
-
+            logger.warning(f"Error cleaning raw text: {str(e)}")
+    
+    logger.debug(f"Feature text extracted, length: {len(weighted_text)} characters")
     return weighted_text.strip()
 
-# Base directory - updated to match your actual path
+# Base directory
 BASE_PATH = r"C:/Users/yaswa/OneDrive/Desktop/JOBLENS/model"
 
 # Define model paths
@@ -184,20 +179,39 @@ MODEL_PATHS = {
     }
 }
 
+def verify_model_files():
+    """Verify all model files exist before loading"""
+    missing_files = []
+    for category, paths in MODEL_PATHS.items():
+        for model_type, path in paths.items():
+            if not os.path.exists(path):
+                missing_files.append(path)
+                logger.error(f"Missing model file: {path}")
+    
+    if missing_files:
+        logger.error(f"Missing {len(missing_files)} model files: {', '.join(missing_files)}")
+        return False
+    logger.info("All model files verified successfully")
+    return True
+
 def load_model(path):
+    """Load a model with improved error handling"""
     try:
         if not os.path.exists(path):
-            print(f"❌ ERROR: Path does not exist: {path}")
+            logger.error(f"Model file does not exist: {path}")
             return None
         model = joblib.load(path)
-        print(f"✅ Successfully loaded model from: {path}")
+        logger.info(f"Successfully loaded model from: {path}")
         return model
     except Exception as e:
-        print(f"❌ ERROR: Failed to load model from {path}: {str(e)}")
+        logger.error(f"Failed to load model from {path}: {str(e)}")
         return None
 
-# Load all models at startup
-print("Loading models...")
+# Verify and load models at startup
+logger.info("Starting model verification and loading...")
+if not verify_model_files():
+    logger.warning("Some model files are missing. Application may fail for certain operations.")
+
 models = {
     category: {model: load_model(path) for model, path in paths.items()}
     for category, paths in MODEL_PATHS.items()
@@ -205,153 +219,159 @@ models = {
 
 @app.route("/")
 def home():
+    logger.debug("Serving home page")
     return render_template("index.html")
+
+@app.route("/results.html")
+def results():
+    logger.debug("Serving results page")
+    return render_template("results.html")
+
+@app.route("/health", methods=["GET"])
+def health_check():
+    """Simple endpoint to verify server is running"""
+    logger.debug("Health check requested")
+    return jsonify({"status": "ok", "message": "Server is running"}), 200
 
 @app.route("/predict", methods=["POST"])
 def predict():
     temp_path = None
     try:
+        logger.info("Received predict request")
         if "resume" not in request.files:
-            return jsonify({"error": "No file uploaded"}), 400
+            logger.error("No resume file uploaded")
+            return jsonify({"error": "No resume file uploaded"}), 400
 
         file = request.files["resume"]
-        if not file.filename.endswith((".pdf", ".docx")):
+        if not file.filename.lower().endswith((".pdf", ".docx")):
+            logger.error(f"Unsupported file format: {file.filename}")
             return jsonify({"error": "Only PDF and DOCX files are supported"}), 400
 
-        # Create a temporary file with a unique name
+        # Save file to temporary location
         with tempfile.NamedTemporaryFile(delete=False, suffix=os.path.splitext(file.filename)[1]) as tmp:
             temp_path = tmp.name
             file.save(temp_path)
-
-        print(f"Processing file: {file.filename} (saved as {temp_path})")
+        logger.info(f"Saved resume to temporary file: {temp_path}")
 
         # Extract resume details
         resume_data = extract_resume_details(temp_path)
-
         if not resume_data or "error" in resume_data:
-            return jsonify({"error": "Failed to extract resume details"}), 400
+            logger.error(f"Failed to extract resume details: {resume_data.get('error', 'Unknown error')}")
+            return jsonify({"error": "Failed to extract resume details", "details": resume_data.get("error", "")}), 400
 
-        # Print the entire resume_data to debug
-        print("Resume data keys:", resume_data.keys())
+        logger.debug(f"Resume data extracted: {list(resume_data.keys())}")
 
-        # Extract display information with type checking
+        # Extract display information
         name = str(resume_data.get("Name", "Not Found"))
         email = str(resume_data.get("Email", "Not Found"))
-
-        # Try to extract phone number with different approaches
+        
         phone = resume_data.get("Contact Number", None)
-
-        # If phone is None or "Not Found", try to extract from raw text
-        if not phone or phone == "Not Found" or phone == "None":
+        if not phone or phone in ["Not Found", "None"]:
             raw_text = resume_data.get("Raw Text", "")
             if raw_text:
                 phone = extract_phone_number(raw_text)
-                print(f"Extracted phone from raw text: {phone}")
+                logger.debug(f"Extracted phone from raw text: {phone}")
         else:
             phone = str(phone)
-
-        print(f"Final phone number: {phone}")
-
-        # Handle skills section properly
+        
         skills = resume_data.get("Skills", [])
-        if isinstance(skills, list):
-            skills_display = ", ".join(str(skill) for skill in skills)
-        else:
-            skills_display = str(skills)
-
-        # Get education
+        skills_display = ", ".join(str(skill) for skill in skills) if isinstance(skills, list) else str(skills)
+        
         education = resume_data.get("Education", "Not Found")
         if isinstance(education, list):
             education = "\n".join(str(edu) for edu in education)
-
-        # Get experience (keep as a list of dictionaries)
+            
         experience = resume_data.get("Experience", "Not Found")
-
-        # Extract enhanced features from the resume
+        
+        # Extract features
         try:
             feature_text = extract_key_features(resume_data)
-            print(f"Extracted feature text length: {len(feature_text)} characters")
+            logger.debug(f"Feature text extracted, length: {len(feature_text)} characters")
         except Exception as e:
-            print(f"Error in feature extraction: {str(e)}")
-            # Fallback to raw text with simple cleaning
+            logger.error(f"Feature extraction failed: {str(e)}")
             raw_text = resume_data.get("Raw Text", "")
             if isinstance(raw_text, list):
                 raw_text = " ".join(str(item) for item in raw_text)
             feature_text = re.sub(r'[^\w\s]', ' ', raw_text.lower())
             feature_text = re.sub(r'\s+', ' ', feature_text).strip()
-            print("Using fallback text cleaning")
+            logger.info("Using fallback text cleaning")
 
         if not feature_text:
+            logger.error("No meaningful features extracted from resume")
             return jsonify({"error": "Failed to extract meaningful features from resume"}), 400
 
-        # Get user-selected models
-        # Default to one of the available models, e.g., 'knn'
-        categorization_model = request.form.get("categorization_model", "knn")
-        recommendation_model = request.form.get("recommendation_model", "knn")
-
-        print(f"Selected Models - Categorization: {categorization_model}, Recommendation: {recommendation_model}")
+        # Get model selections
+        categorization_model = request.form.get("categorization_model", "nb")
+        recommendation_model = request.form.get("recommendation_model", "nb")
+        logger.info(f"Selected models - Categorization: {categorization_model}, Recommendation: {recommendation_model}")
 
         if categorization_model not in models["categorization"] or recommendation_model not in models["recommendation"]:
+            logger.error(f"Invalid model selection: Cat={categorization_model}, Rec={recommendation_model}")
             return jsonify({"error": "Invalid model selection"}), 400
 
         # Load TF-IDF vectorizers
         cat_tfidf = models["categorization"].get("tfidf")
         rec_tfidf = models["recommendation"].get("tfidf")
-
         if not cat_tfidf or not rec_tfidf:
-            return jsonify({"error": "TF-IDF vectorizer could not be loaded. Check the server logs for details on the missing file."}), 500
+            missing_files = []
+            if not cat_tfidf:
+                missing_files.append(MODEL_PATHS["categorization"]["tfidf"])
+            if not rec_tfidf:
+                missing_files.append(MODEL_PATHS["recommendation"]["tfidf"])
+            logger.error(f"Missing TF-IDF vectorizers: {missing_files}")
+            return jsonify({"error": f"Missing TF-IDF vectorizers: {', '.join(missing_files)}"}), 500
 
-        # Transform features using TF-IDF
+        # Transform features
         input_tfidf_cat = cat_tfidf.transform([feature_text])
         input_tfidf_rec = rec_tfidf.transform([feature_text])
-
-        # Get prediction probabilities when available
+        
+        # Make predictions
         cat_model = models["categorization"].get(categorization_model)
         rec_model = models["recommendation"].get(recommendation_model)
-
         if not cat_model or not rec_model:
+            logger.error("Selected models could not be loaded")
             return jsonify({"error": "Selected model could not be loaded"}), 500
 
-        # Make predictions
         category_pred = int(cat_model.predict(input_tfidf_cat)[0])
         job_pred = int(rec_model.predict(input_tfidf_rec)[0])
-
-        # Get prediction probabilities if model supports it
+        
+        # Get probabilities
         cat_probs = {}
         job_probs = {}
-
         try:
             if hasattr(cat_model, 'predict_proba'):
                 cat_prob_values = cat_model.predict_proba(input_tfidf_cat)[0]
                 category_encoder = models["categorization"].get("label_encoder")
                 cat_classes = category_encoder.classes_
-                cat_probs = {str(category_encoder.inverse_transform([i])[0]): round(float(prob)*100, 2)
-                            for i, prob in enumerate(cat_prob_values) if prob > 0.05}  # Show only probabilities > 5%
+                cat_probs = {
+                    str(category_encoder.inverse_transform([i])[0]): round(float(prob) * 100, 2)
+                    for i, prob in enumerate(cat_prob_values) if prob > 0.05
+                }
         except Exception as e:
-            print(f"Warning: Could not get category probabilities: {str(e)}")
-
+            logger.warning(f"Failed to get category probabilities: {str(e)}")
+        
         try:
             if hasattr(rec_model, 'predict_proba'):
                 job_prob_values = rec_model.predict_proba(input_tfidf_rec)[0]
                 job_encoder = models["recommendation"].get("label_encoder")
                 job_classes = job_encoder.classes_
-                job_probs = {str(job_encoder.inverse_transform([i])[0]): round(float(prob)*100, 2)
-                            for i, prob in enumerate(job_prob_values) if prob > 0.05}  # Show only probabilities > 5%
+                job_probs = {
+                    str(job_encoder.inverse_transform([i])[0]): round(float(prob) * 100, 2)
+                    for i, prob in enumerate(job_prob_values) if prob > 0.05
+                }
         except Exception as e:
-            print(f"Warning: Could not get job recommendation probabilities: {str(e)}")
+            logger.warning(f"Failed to get job probabilities: {str(e)}")
+        
+        logger.debug(f"Predictions - Category: {category_pred}, Job: {job_pred}")
 
-        print(f"Raw Predictions - Category: {category_pred}, Job: {job_pred}")
-
-        # Load label encoders
+        # Decode predictions
         category_encoder = models["categorization"].get("label_encoder")
         job_encoder = models["recommendation"].get("label_encoder")
-
         category_label = str(category_encoder.inverse_transform([category_pred])[0]) if category_encoder else "Unknown"
         job_label = str(job_encoder.inverse_transform([job_pred])[0]) if job_encoder else "Unknown"
+        
+        logger.info(f"Decoded predictions - Category: {category_label}, Job: {job_label}")
 
-        print(f"Decoded Predictions - Category: {category_label}, Job: {job_label}")
-
-        # Prepare response
         response = {
             "Resume Data": {
                 "Name": name,
@@ -359,86 +379,80 @@ def predict():
                 "Phone": phone,
                 "Skills": skills_display,
                 "Education": education,
-                "Experience": experience  # Keep as a list of dictionaries
+                "Experience": experience
             },
             "Predictions": {
                 "Categorization": category_label,
                 "Job Recommendation": job_label
             }
         }
-
-        # Add probabilities to response if available
+        
         if cat_probs:
             response["Predictions"]["Category Probabilities"] = cat_probs
         if job_probs:
             response["Predictions"]["Job Recommendation Probabilities"] = job_probs
 
+        logger.info("Prediction completed successfully")
         return jsonify(response)
-
+    
     except Exception as e:
-        print(f"Unexpected error: {str(e)}")
-        import traceback
-        traceback.print_exc()
-        return jsonify({"error": f"An unexpected error occurred: {str(e)}"}), 500
+        logger.error(f"Unexpected error in predict endpoint: {str(e)}")
+        logger.error(traceback.format_exc())
+        return jsonify({"error": f"An unexpected error occurred: {str(e)}", "details": traceback.format_exc()}), 500
     finally:
-        # Clean up temporary file if it exists
         if temp_path and os.path.exists(temp_path):
             try:
                 os.remove(temp_path)
-                print(f"Temporary file {temp_path} removed successfully")
+                logger.info(f"Removed temporary file: {temp_path}")
             except Exception as e:
-                print(f"Error removing temporary file {temp_path}: {str(e)}")
+                logger.error(f"Failed to remove temporary file {temp_path}: {str(e)}")
 
 @app.route("/ats_check", methods=["POST"])
 def ats_check():
     temp_path = None
     try:
+        logger.info("Received ATS check request")
         if "resume" not in request.files:
-            return jsonify({"error": "No file uploaded"}), 400
+            logger.error("No resume file uploaded")
+            return jsonify({"error": "No resume file uploaded"}), 400
 
         file = request.files["resume"]
-        if not file.filename.endswith((".pdf", ".docx")):
+        if not file.filename.lower().endswith((".pdf", ".docx")):
+            logger.error(f"Unsupported file format: {file.filename}")
             return jsonify({"error": "Only PDF and DOCX files are supported"}), 400
 
-        # Create a temporary file with a unique name
         with tempfile.NamedTemporaryFile(delete=False, suffix=os.path.splitext(file.filename)[1]) as tmp:
             temp_path = tmp.name
             file.save(temp_path)
+        logger.info(f"Saved resume to temporary file: {temp_path}")
 
-        print(f"ATS check processing file: {file.filename} (saved as {temp_path})")
-
-        # Check file format
         format_check = check_file_format(temp_path)
-
-        # Extract text from the resume
+        
         if temp_path.endswith(".pdf"):
             resume_text = extract_text_from_pdf(temp_path)
         elif temp_path.endswith(".docx"):
             resume_text = extract_text_from_docx(temp_path)
         else:
             resume_text = ""
-
-        # Get optional job description and industry
-        job_description = request.form.get("job_description", "")
-        industry = request.form.get("industry", "")
-
+        
         if not resume_text:
+            logger.error("Failed to extract text from resume")
             return jsonify({"error": "Failed to extract text from resume"}), 400
 
-        # Run ATS compatibility check
-        ats_results = check_ats_compatibility(resume_text, job_description)
+        job_description = request.form.get("job_description", "")
+        industry = request.form.get("industry", "")
+        logger.debug(f"Job description length: {len(job_description)}, Industry: {industry}")
 
-        # Add industry benchmarking if specified
+        ats_results = check_ats_compatibility(resume_text, job_description)
+        
         if industry:
             benchmark = benchmark_against_industry(resume_text, industry)
             if 'details' not in ats_results:
                 ats_results['details'] = {}
             ats_results['details']['industry_benchmark'] = benchmark
-
-            # Add industry-specific recommendations
             if 'missing_keywords' in benchmark and benchmark.get('industry_relevance', 0) < 0.5:
                 missing_keywords = benchmark.get('missing_keywords', [])
-                if missing_keywords and len(missing_keywords) > 0:
+                if missing_keywords:
                     ats_results['recommendations'].append(
                         f"Add more {benchmark['industry']}-specific keywords: {', '.join(missing_keywords[:3])}"
                     )
@@ -453,25 +467,25 @@ def ats_check():
                 "issues": format_check.get("issues", [])
             }
         }
-
+        
         if 'details' in ats_results:
             response["details"] = ats_results['details']
-
-        print("ATS Check Response:", response)
+            
+        logger.info("ATS check completed successfully")
         return jsonify(response)
+    
     except Exception as e:
-        print(f"ATS check error: {str(e)}")
-        import traceback
-        traceback.print_exc()
-        return jsonify({"error": f"An unexpected error occurred during ATS check: {str(e)}"}), 500
+        logger.error(f"Unexpected error in ATS check: {str(e)}")
+        logger.error(traceback.format_exc())
+        return jsonify({"error": f"An unexpected error occurred during ATS check: {str(e)}", "details": traceback.format_exc()}), 500
     finally:
-        # Clean up temporary file if it exists
         if temp_path and os.path.exists(temp_path):
             try:
                 os.remove(temp_path)
-                print(f"Temporary file {temp_path} removed successfully")
+                logger.info(f"Removed temporary file: {temp_path}")
             except Exception as e:
-                print(f"Error removing temporary file {temp_path}: {str(e)}")
+                logger.error(f"Failed to remove temporary file {temp_path}: {str(e)}")
 
 if __name__ == "__main__":
-    app.run(debug=True)
+    logger.info("Starting Flask application")
+    app.run(debug=True, host='0.0.0.0', port=5000)
