@@ -512,4 +512,6 @@ def ats_check():
 
 if __name__ == "__main__":
     logger.info("Starting Flask application")
-    app.run(debug=True, host='0.0.0.1', port=5000)
+    port = int(os.environ.get("PORT", 5000))  # Use Render's assigned port
+    app.run(debug=False, host='0.0.0.0', port=port)
+
