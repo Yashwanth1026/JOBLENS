@@ -13,6 +13,8 @@ import nltk
 from ats_checker import check_ats_compatibility, extract_text_from_pdf, extract_text_from_docx, benchmark_against_industry, check_file_format
 import tempfile
 import traceback
+import subprocess
+import sys
 
 # Configure logging
 logging.basicConfig(
@@ -35,6 +37,28 @@ except Exception as e:
 
 from nltk.stem import WordNetLemmatizer
 from nltk.corpus import stopwords
+
+# Download spacy model at runtime
+def download_spacy_model(model_name="en_core_web_sm"):
+    try:
+        import spacy
+        spacy.load(model_name)
+        logger.info(f"Spacy model '{model_name}' is already available")
+    except OSError:
+        logger.info(f"Downloading spacy model: {model_name}")
+        try:
+            subprocess.check_call([sys.executable, "-m", "spacy", "download", model_name])
+            logger.info(f"Successfully downloaded spacy model: {model_name}")
+        except subprocess.CalledProcessError as e:
+            logger.error(f"Failed to download spacy model '{model_name}': {str(e)}")
+            raise Exception(f"Failed to download spacy model: {model_name}")
+
+# Call this at app startup
+try:
+    download_spacy_model()
+except Exception as e:
+    logger.error(f"Spacy model setup failed: {str(e)}")
+    # Continue running the app, as the model might not be critical for all routes
 
 app = Flask(__name__)
 # Enable CORS explicitly for localhost development
@@ -488,4 +512,4 @@ def ats_check():
 
 if __name__ == "__main__":
     logger.info("Starting Flask application")
-    app.run(debug=True, host='0.0.0.0', port=5000)
+    app.run(debug=True, host='0.0.0.1', port=5000)
