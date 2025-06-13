@@ -1,0 +1,591 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>JobLens AI - Resume Analyzer</title>
+    <!-- Bootstrap CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet" integrity="sha384-QWTKZyjpPEjISv5WaRU9OFeRpok6YctnYmDr5pNlyT2bRjXh0JMhjY6hW+ALEwIH" crossorigin="anonymous">
+    <!-- Animate.css -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/animate.css/4.1.1/animate.min.css"/>
+    <!-- Font Awesome for Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css" integrity="sha512-SnH5WK+bZxgPHs44uWIX+LLJAJ9/2PkPKZ5QiAj6Ta86w+fsb2TkcmfRyVX3pBnMFcV7oQPJkl9QevSCWr3W6A==" crossorigin="anonymous" referrerpolicy="no-referrer" />
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@700&family=Poppins:wght@400;500&display=swap" rel="stylesheet">
+    <!-- GSAP for Animations -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/gsap.min.js"></script>
+    <style>
+        /* Custom Styles */
+        body {
+            font-family: 'Poppins', sans-serif;
+            background: linear-gradient(135deg, #e2e8f0 0%, #d1d5db 100%);
+            min-height: 100vh;
+            overflow-x: hidden;
+            transition: background 0.5s ease, color 0.5s ease;
+        }
+        .navbar {
+            transition: background-color 0.3s ease;
+        }
+        .navbar.scrolled {
+            background-color: rgba(30, 41, 59, 0.95) !important;
+            backdrop-filter: blur(10px);
+        }
+        .hero-section {
+            background: linear-gradient(45deg, #4B5EAA 0%, #8B5CF6 100%);
+            color: white;
+            padding: 6rem 0;
+            position: relative;
+            overflow: hidden;
+            transition: background 0.5s ease;
+        }
+        .hero-section::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: url('https://www.transparenttextures.com/patterns/stardust.png');
+            opacity: 0.15;
+            transition: opacity 0.5s ease;
+        }
+        .title-main {
+            font-family: 'Montserrat', sans-serif;
+            font-size: 3.5rem;
+            font-weight: 700;
+            background: linear-gradient(90deg, #ffffff, #d1d5db);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            display: inline-block;
+        }
+        .title-sub {
+            font-size: 1.5rem;
+            opacity: 0;
+        }
+        .title-main:hover, .title-sub:hover {
+            animation: pulse 1.5s infinite;
+        }
+        @keyframes pulse {
+            0% { text-shadow: 0 0 5px rgba(255, 255, 255, 0.5); }
+            50% { text-shadow: 0 0 20px rgba(255, 255, 255, 0.8), 0 0 30px rgba(139, 92, 246, 0.5); }
+            100% { text-shadow: 0 0 5px rgba(255, 255, 255, 0.5); }
+        }
+        .feature-card {
+            transition: transform 0.3s ease, box-shadow 0.3s ease, background 0.5s ease, color 0.5s ease;
+            border: none;
+            background: #ffffff;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+        }
+        .feature-card:hover {
+            transform: translateY(-10px);
+            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.15) !important;
+        }
+        .upload-area {
+            border: 2px dashed #6B7280;
+            padding: 2rem;
+            border-radius: 12px;
+            background: #f8f9fa;
+            transition: background-color 0.5s ease, border-color 0.5s ease;
+        }
+        .upload-area.dragover {
+            background-color: #e0e7ff;
+            border-color: #4B5EAA;
+        }
+        .form-control {
+            transition: background 0.5s ease, color 0.5s ease, border-color 0.5s ease;
+        }
+        .form-control:focus {
+            box-shadow: 0 0 0 0.2rem rgba(75, 85, 99, 0.25);
+            border-color: #4B5EAA;
+        }
+        .btn-primary {
+            background-color: #4B5EAA;
+            border-color: #4B5EAA;
+            transition: background-color 0.3s ease, border-color 0.3s ease;
+        }
+        .btn-primary:hover {
+            background-color: #3b4a8a;
+            border-color: #3b4a8a;
+        }
+        .bg-light {
+            background: #f1f5f9 !important;
+            transition: background 0.5s ease;
+        }
+        .bg-dark {
+            background: #1e293b !important;
+            transition: background 0.5s ease;
+        }
+        /* Dark Mode */
+        .dark-mode {
+            background: linear-gradient(135deg, #1e293b 0%, #2d3748 100%);
+            color: #e5e7eb;
+        }
+        .dark-mode .navbar {
+            background-color: rgba(17, 24, 39, 0.95) !important;
+        }
+        .dark-mode .navbar.scrolled {
+            background-color: rgba(17, 24, 39, 0.95) !important;
+        }
+        .dark-mode .hero-section {
+            background: linear-gradient(45deg, #2d3748 0%, #4b5563 100%);
+        }
+        .dark-mode .hero-section::before {
+            opacity: 0.2;
+        }
+        .dark-mode .hero-section .lead {
+            color: #d1d5db;
+        }
+        .dark-mode .title-main {
+            background: linear-gradient(90deg, #a5b4fc, #f9a8d4);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+        .dark-mode .title-sub {
+            background: linear-gradient(90deg, #d1d5db, #f3e8ff);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+        .dark-mode .btn-get-started {
+            background: linear-gradient(45deg, #8B5CF6, #a5b4fc);
+            color: white;
+            border: none;
+        }
+        .dark-mode .btn-get-started:hover {
+            background: linear-gradient(45deg, #7c3aed, #93c5fd);
+            transform: scale(1.05);
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3);
+        }
+        .dark-mode .feature-card {
+            background: #2d3748;
+            color: #e5e7eb;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3);
+        }
+        .dark-mode .feature-card:hover {
+            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.4) !important;
+        }
+        .dark-mode .upload-area {
+            background: #374151;
+            border-color: #6b7280;
+        }
+        .dark-mode .upload-area.dragover {
+            background: #4b5563;
+            border-color: #8B5CF6;
+        }
+        .dark-mode .form-control {
+            background: #4b5563;
+            color: #e5e7eb;
+            border-color: #6b7280;
+        }
+        .dark-mode .form-control:focus {
+            box-shadow: 0 0 0 0.2rem rgba(139, 92, 246, 0.25);
+            border-color: #8B5CF6;
+        }
+        .dark-mode .bg-light {
+            background: #2d3748 !important;
+        }
+        .dark-mode .modal-content {
+            background: #2d3748;
+            color: #e5e7eb;
+            border: 1px solid #4b5563;
+        }
+        .dark-mode .modal-header, .dark-mode .modal-footer {
+            border-color: #4b5563;
+        }
+        .dark-mode .btn-primary {
+            background-color: #8B5CF6;
+            border-color: #8B5CF6;
+        }
+        .dark-mode .btn-primary:hover {
+            background-color: #7c3aed;
+            border-color: #7c3aed;
+        }
+        .progress-bar {
+            transition: width 0.5s ease;
+        }
+        /* Custom Scrollbar */
+        ::-webkit-scrollbar {
+            width: 8px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #e2e8f0;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #4B5EAA;
+            border-radius: 4px;
+        }
+        .dark-mode ::-webkit-scrollbar-track {
+            background: #2d3748;
+        }
+        .dark-mode ::-webkit-scrollbar-thumb {
+            background: #8B5CF6;
+        }
+    </style>
+</head>
+<body>
+    <!-- Navigation Bar -->
+    <nav class="navbar navbar-expand-lg navbar-dark bg-dark fixed-top">
+        <div class="container">
+            <a class="navbar-brand animate__animated animate__fadeIn" href="#">JobLens AI</a>
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav" aria-controls="navbarNav" aria-expanded="false" aria-label="Toggle navigation">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+            <div class="collapse navbar-collapse" id="navbarNav">
+                <ul class="navbar-nav ms-auto">
+                    <li class="nav-item">
+                        <a class="nav-link animate__animated animate__fadeIn" href="#home">Home</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link animate__animated animate__fadeIn" href="#features">Features</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link animate__animated animate__fadeIn" href="#upload">Upload Resume</a>
+                    </li>
+                    <li class="nav-item">
+                        <button id="themeToggle" class="btn btn-link nav-link animate__animated animate__fadeIn">
+                            <i class="fas fa-moon"></i>
+                        </button>
+                    </li>
+                </ul>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Hero Section -->
+    <section id="home" class="hero-section text-center">
+        <div class="container">
+            <h1 class="display-4 fw-bold">
+                <span class="title-main" id="titleMain"></span>
+                <div class="title-sub mt-2" id="titleSub">Resume Analyzer</div>
+            </h1>
+            <p class="lead mt-4 animate__animated animate__fadeInUp animate__delay-1s">
+                Unlock your career potential with JobLens AI. Upload your resume to get ATS compatibility scores, job role predictions, and personalized recommendations powered by advanced AI technology.
+            </p>
+            <a href="#upload" class="btn btn-light btn-lg mt-4 animate__animated animate__bounceIn animate__delay-2s btn-get-started">Get Started</a>
+        </div>
+    </section>
+
+    <!-- Features Section -->
+    <section id="features" class="py-5">
+        <div class="container">
+            <h2 class="text-center mb-5 fw-bold animate__animated animate__fadeIn">Why Choose JobLens AI?</h2>
+            <div class="row">
+                <div class="col-md-4 mb-4">
+                    <div class="card feature-card animate__animated animate__fadeInUp">
+                        <div class="card-body text-center">
+                            <i class="fas fa-robot fa-3x text-primary mb-3"></i>
+                            <h5 class="card-title">AI-Powered Analysis</h5>
+                            <p class="card-text">Leverage advanced machine learning to analyze your resume with precision.</p>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-4 mb-4">
+                    <div class="card feature-card animate__animated animate__fadeInUp animate__delay-1s">
+                        <div class="card-body text-center">
+                            <i class="fas fa-check-circle fa-3x text-success mb-3"></i>
+                            <h5 class="card-title">ATS Compatibility</h5>
+                            <p class="card-text">Get a detailed ATS score and recommendations to improve your resume.</p>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-4 mb-4">
+                    <div class="card feature-card animate__animated animate__fadeInUp animate__delay-2s">
+                        <div class="card-body text-center">
+                            <i class="fas fa-briefcase fa-3x text-warning mb-3"></i>
+                            <h5 class="card-title">Job Predictions</h5>
+                            <p class="card-text">Discover the best job roles and categories for your skills and experience.</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Upload Section -->
+    <section id="upload" class="py-5 bg-light">
+        <div class="container">
+            <h2 class="text-center mb-5 fw-bold animate__animated animate__fadeIn">Upload Your Resume</h2>
+            <div class="row justify-content-center">
+                <div class="col-md-8">
+                    <div class="card shadow animate__animated animate__zoomIn">
+                        <div class="card-body">
+                            <form id="resumeForm" enctype="multipart/form-data">
+                                <!-- Drag and Drop Upload -->
+                                <div class="upload-area mb-4 text-center" id="uploadArea">
+                                    <i class="fas fa-cloud-upload-alt fa-3x text-muted mb-3"></i>
+                                    <p>Drag & Drop your resume here or</p>
+                                    <input type="file" id="resume" name="resume" accept=".pdf,.docx" class="d-none" required>
+                                    <button type="button" class="btn btn-primary" onclick="document.getElementById('resume').click()">Choose File</button>
+                                    <p id="fileName" class="mt-3 text-muted">No file selected</p>
+                                    <p id="resumeError" class="text-danger mt-2 d-none"></p>
+                                </div>
+
+                                <!-- Progress Bar -->
+                                <div class="progress mb-4 d-none" id="progressBar">
+                                    <div class="progress-bar progress-bar-striped progress-bar-animated" role="progressbar" id="progressFill" style="width: 0%"></div>
+                                </div>
+
+                                <!-- Job Description -->
+                                <div class="mb-3">
+                                    <label for="jobDescription" class="form-label">Job Description (Optional)</label>
+                                    <textarea class="form-control" id="jobDescription" name="job_description" rows="4" placeholder="Paste the job description here for better ATS scoring"></textarea>
+                                </div>
+
+                                <!-- Industry Selection -->
+                                <div class="mb-3">
+                                    <label for="industry" class="form-label">Industry (Optional)</label>
+                                    <select class="form-select" id="industry" name="industry">
+                                        <option value="">Select Industry</option>
+                                        <option value="software">Software</option>
+                                        <option value="finance">Finance</option>
+                                        <option value="marketing">Marketing</option>
+                                        <option value="healthcare">Healthcare</option>
+                                        <option value="data">Data</option>
+                                    </select>
+                                </div>
+
+                                <!-- Model Selection -->
+                                <div class="row mb-3">
+                                    <div class="col-md-6">
+                                        <label for="categorizationModel" class="form-label">Job Category Model</label>
+                                        <select class="form-select" id="categorizationModel" name="categorization_model">
+                                            <option value="nb">Naive Bayes</option>
+                                            <option value="logistic">Logistic Regression</option>
+                                            <option value="knn">K-Nearest Neighbors</option>
+                                        </select>
+                                    </div>
+                                    <div class="col-md-6">
+                                        <label for="recommendationModel" class="form-label">Job Role Model</label>
+                                        <select class="form-select" id="recommendationModel" name="recommendation_model">
+                                            <option value="nb">Naive Bayes</option>
+                                            <option value="logistic">Logistic Regression</option>
+                                            <option value="knn">K-Nearest Neighbors</option>
+                                        </select>
+                                    </div>
+                                </div>
+
+                                <!-- Submit Button -->
+                                <button type="submit" id="submitBtn" class="btn btn-primary w-100">
+                                    <span id="submitText">Analyze Resume</span>
+                                    <span id="loadingSpinner" class="spinner-border spinner-border-sm ms-2 d-none" role="status"></span>
+                                </button>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Footer -->
+    <footer class="bg-dark text-white py-4">
+        <div class="container text-center">
+            <p>© 2025 JobLens AI. All rights reserved.</p>
+        </div>
+    </footer>
+
+    <!-- Modal for Errors/Tips -->
+    <div class="modal fade" id="infoModal" tabindex="-1" aria-labelledby="infoModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="infoModalLabel">Information</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body" id="modalBody">
+                    <!-- Dynamic content -->
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-primary" data-bs-dismiss="modal">Got It</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Bootstrap JS and Popper.js -->
+    <script src="https://cdn.jsdelivr.net/npm/@popperjs/core@2.11.8/dist/umd/popper.min.js" integrity="sha384-I7E8VVD/ismYTF4hNIPjVp/Zjvgyol6VFvRkX/vR+Vc4jQkC+hVqc2pM8ODewa9r" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.min.js" integrity="sha384-0pUGZvbkm6XF6gxjEnlmuGrJXVbNuzT9qBBavbLwCsOGabYfZo0T0to5eqruptLy" crossorigin="anonymous"></script>
+    <script>
+        // Theme Toggle
+        const themeToggle = document.getElementById('themeToggle');
+        themeToggle.addEventListener('click', () => {
+            document.body.classList.toggle('dark-mode');
+            const icon = themeToggle.querySelector('i');
+            if (document.body.classList.contains('dark-mode')) {
+                icon.classList.remove('fa-moon');
+                icon.classList.add('fa-sun');
+                localStorage.setItem('theme', 'dark');
+            } else {
+                icon.classList.remove('fa-sun');
+                icon.classList.add('fa-moon');
+                localStorage.setItem('theme', 'light');
+            }
+        });
+
+        // Load theme from localStorage
+        if (localStorage.getItem('theme') === 'dark') {
+            document.body.classList.add('dark-mode');
+            themeToggle.querySelector('i').classList.replace('fa-moon', 'fa-sun');
+        }
+
+        // Sticky Navbar on Scroll
+        window.addEventListener('scroll', () => {
+            const navbar = document.querySelector('.navbar');
+            if (window.scrollY > 50) {
+                navbar.classList.add('scrolled');
+            } else {
+                navbar.classList.remove('scrolled');
+            }
+        });
+
+        // Smooth Scrolling for Nav Links
+        document.querySelectorAll('a[href^="#"]').forEach(anchor => {
+            anchor.addEventListener('click', function(e) {
+                e.preventDefault();
+                const target = document.querySelector(this.getAttribute('href'));
+                target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            });
+        });
+
+        // Drag and Drop Handling
+        const uploadArea = document.getElementById('uploadArea');
+        const resumeInput = document.getElementById('resume');
+        const fileNameDisplay = document.getElementById('fileName');
+
+        uploadArea.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            uploadArea.classList.add('dragover');
+        });
+
+        uploadArea.addEventListener('dragleave', () => {
+            uploadArea.classList.remove('dragover');
+        });
+
+        uploadArea.addEventListener('drop', (e) => {
+            e.preventDefault();
+            uploadArea.classList.remove('dragover');
+            const files = e.dataTransfer.files;
+            if (files.length > 0) {
+                resumeInput.files = files;
+                fileNameDisplay.textContent = files[0].name;
+                gsap.to(fileNameDisplay, { opacity: 1, y: 0, duration: 0.5 });
+            }
+        });
+
+        resumeInput.addEventListener('change', () => {
+            if (resumeInput.files.length > 0) {
+                fileNameDisplay.textContent = resumeInput.files[0].name;
+                gsap.to(fileNameDisplay, { opacity: 1, y: 0, duration: 0.5 });
+            } else {
+                fileNameDisplay.textContent = 'No file selected';
+            }
+        });
+
+        // Form Submission
+        document.getElementById('resumeForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const form = e.target;
+            const formData = new FormData(form);
+            const resumeError = document.getElementById('resumeError');
+            const submitBtn = document.getElementById('submitBtn');
+            const submitText = document.getElementById('submitText');
+            const loadingSpinner = document.getElementById('loadingSpinner');
+            const progressBar = document.getElementById('progressBar');
+            const progressFill = document.getElementById('progressFill');
+
+            // Validate file
+            if (!resumeInput.files[0]) {
+                resumeError.textContent = 'Please select a resume file.';
+                resumeError.classList.remove('d-none');
+                showModal('Error', 'Please select a resume file to proceed.');
+                return;
+            }
+            if (!resumeInput.files[0].name.match(/\.(pdf|docx)$/i)) {
+                resumeError.textContent = 'Only PDF and DOCX files are supported.';
+                resumeError.classList.remove('d-none');
+                showModal('Error', 'Only PDF and DOCX files are supported.');
+                return;
+            }
+            resumeError.classList.add('d-none');
+
+            // Show loading state
+            submitBtn.disabled = true;
+            submitText.textContent = 'Analyzing...';
+            loadingSpinner.classList.remove('d-none');
+            progressBar.classList.remove('d-none');
+            let progress = 0;
+            const progressInterval = setInterval(() => {
+                progress += 10;
+                progressFill.style.width = `${progress}%`;
+                if (progress >= 90) clearInterval(progressInterval);
+            }, 500);
+
+            try {
+                // Simulate progress for ATS check
+                const atsResponse = await fetch('/ats_check', {
+                    method: 'POST',
+                    body: formData
+                });
+                progressFill.style.width = '50%';
+
+                // Simulate progress for Predict
+                const predictResponse = await fetch('/predict', {
+                    method: 'POST',
+                    body: formData
+                });
+                progressFill.style.width = '100%';
+
+                const atsResult = await atsResponse.json();
+                const predictResult = await predictResponse.json();
+
+                if (atsResponse.ok && predictResponse.ok) {
+                    sessionStorage.setItem('atsResult', JSON.stringify(atsResult));
+                    sessionStorage.setItem('predictResult', JSON.stringify(predictResult));
+                    window.location.href = '/results.html';
+                } else {
+                    throw new Error(atsResult.error || predictResult.error || 'Analysis failed');
+                }
+            } catch (error) {
+                showModal('Error', `An error occurred: ${error.message}`);
+            } finally {
+                clearInterval(progressInterval);
+                progressBar.classList.add('d-none');
+                submitBtn.disabled = false;
+                submitText.textContent = 'Analyze Resume';
+                loadingSpinner.classList.add('d-none');
+                progressFill.style.width = '0%';
+            }
+        });
+
+        // Modal Helper Function
+        function showModal(title, message) {
+            const modal = new bootstrap.Modal(document.getElementById('infoModal'));
+            document.getElementById('infoModalLabel').textContent = title;
+            document.getElementById('modalBody').textContent = message;
+            modal.show();
+            gsap.from('.modal-content', { opacity: 0, y: -50, duration: 0.5, ease: 'power2.out' });
+        }
+
+        // Title Typing Animation
+        const titleMain = document.getElementById('titleMain');
+        const titleSub = document.getElementById('titleSub');
+        const text = "JobLens AI";
+        let i = 0;
+
+        function typeEffect() {
+            if (i < text.length) {
+                titleMain.textContent += text.charAt(i);
+                i++;
+                setTimeout(typeEffect, 100);
+            } else {
+                gsap.to(titleSub, { opacity: 1, duration: 1, ease: 'power2.in' });
+            }
+        }
+
+        // Initial Animations
+        gsap.from('.navbar', { opacity: 0, y: -50, duration: 1, ease: 'power2.out' });
+        window.onload = () => {
+            typeEffect();
+        };
+    </script>
+</body>
+</html>
