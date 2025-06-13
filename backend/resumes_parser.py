@@ -16,14 +16,10 @@ except OSError:
     subprocess.run(["python", "-m", "spacy", "download", "en_core_web_sm"])
     nlp = spacy.load("en_core_web_sm")
 
-
-# Define dataset paths
-BASE_DIR = "C:/Users/yaswa/OneDrive/Desktop/JOBLENS/datasets/"
+# Define dataset paths using a relative path
+BASE_DIR = os.path.join(os.path.dirname(__file__), "datasets")
 SKILLS_FILE = os.path.join(BASE_DIR, "skills.json")
 EDUCATION_FILE = os.path.join(BASE_DIR, "education.json")
-
-
-
 
 # Function to load JSON data safely
 def load_json(file_path, key):
