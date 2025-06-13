@@ -43,7 +43,7 @@ except Exception as e:
 from nltk.stem import WordNetLemmatizer
 from nltk.corpus import stopwords
 
-# Download spacy model at runtime with improved logging
+# Download spacy model at runtime with improved logging and timeout
 def download_spacy_model(model_name="en_core_web_sm"):
     try:
         import spacy
@@ -52,10 +52,13 @@ def download_spacy_model(model_name="en_core_web_sm"):
     except OSError:
         logger.info(f"Downloading spacy model: {model_name}")
         try:
-            result = subprocess.check_call([sys.executable, "-m", "spacy", "download", model_name])
+            result = subprocess.check_call([sys.executable, "-m", "spacy", "download", model_name], timeout=300)
             logger.info(f"Subprocess result: {result}")
             spacy.load(model_name)  # Verify the model loaded after download
             logger.info(f"Successfully downloaded and loaded spacy model: {model_name}")
+        except subprocess.TimeoutExpired:
+            logger.error(f"Timeout while downloading spacy model '{model_name}'")
+            raise Exception(f"Timeout while downloading spacy model: {model_name}")
         except subprocess.CalledProcessError as e:
             logger.error(f"Failed to download spacy model '{model_name}': {str(e)}")
             raise Exception(f"Failed to download spacy model: {model_name}")
@@ -259,7 +262,11 @@ def results():
 
 @app.route("/favicon.ico")
 def favicon():
-    return send_from_directory(os.path.join(app.root_path, 'static'), 'favicon.ico', mimetype='image/vnd.microsoft.icon')
+    try:
+        return send_from_directory(os.path.join(app.root_path, 'static'), 'favicon.ico', mimetype='image/vnd.microsoft.icon')
+    except Exception as e:
+        logger.error(f"Failed to serve favicon: {str(e)}")
+        return jsonify({"error": "Favicon not found"}), 404
 
 @app.route("/health", methods=["GET"])
 def health_check():
@@ -281,6 +288,8 @@ def predict():
             logger.error(f"Unsupported file format: {file.filename}")
             return jsonify({"error": "Only PDF and DOCX files are supported"}), 400
 
+        logger.debug(f"Processing file: {file.filename}")
+
         # Save file to temporary location
         with tempfile.NamedTemporaryFile(delete=False, suffix=os.path.splitext(file.filename)[1]) as tmp:
             temp_path = tmp.name
@@ -288,10 +297,12 @@ def predict():
         logger.info(f"Saved resume to temporary file: {temp_path}")
 
         # Extract resume details
+        logger.debug("Extracting resume details...")
         resume_data = extract_resume_details(temp_path)
         if not resume_data or "error" in resume_data:
-            logger.error(f"Failed to extract resume details: {resume_data.get('error', 'Unknown error')}")
-            return jsonify({"error": "Failed to extract resume details", "details": resume_data.get("error", "")}), 400
+            error_msg = resume_data.get('error', 'Unknown error')
+            logger.error(f"Failed to extract resume details: {error_msg}")
+            return jsonify({"error": "Failed to extract resume details", "details": error_msg}), 400
 
         logger.debug(f"Resume data extracted: {list(resume_data.keys())}")
 
@@ -313,11 +324,22 @@ def predict():
         
         education = resume_data.get("Education", "Not Found")
         if isinstance(education, list):
-            education = "\n".join(str(edu) for edu in education)
+            education = [str(edu) for edu in education]  # Ensure all items are strings
             
         experience = resume_data.get("Experience", "Not Found")
+        if isinstance(experience, list):
+            experience = [
+                {
+                    "Job_Title": str(exp.get("Job Title", "N/A")) if isinstance(exp, dict) else "N/A",
+                    "Company": str(exp.get("Company", "N/A")) if isinstance(exp, dict) else "N/A",
+                    "Duration": str(exp.get("Duration", "N/A")) if isinstance(exp, dict) else "N/A",
+                    "Key_Responsibilities": [str(resp) for resp in exp.get("Key Responsibilities", [])] if isinstance(exp, dict) and isinstance(exp.get("Key Responsibilities"), list) else []
+                } if isinstance(exp, dict) else str(exp)
+                for exp in experience
+            ]
         
         # Extract features
+        logger.debug("Extracting key features...")
         try:
             feature_text = extract_key_features(resume_data)
             logger.debug(f"Feature text extracted, length: {len(feature_text)} characters")
@@ -344,6 +366,7 @@ def predict():
             return jsonify({"error": "Invalid model selection"}), 400
 
         # Load TF-IDF vectorizers
+        logger.debug("Loading TF-IDF vectorizers...")
         cat_tfidf = models["categorization"].get("tfidf")
         rec_tfidf = models["recommendation"].get("tfidf")
         if not cat_tfidf or not rec_tfidf:
@@ -356,10 +379,12 @@ def predict():
             return jsonify({"error": f"Missing TF-IDF vectorizers: {', '.join(missing_files)}"}), 500
 
         # Transform features
+        logger.debug("Transforming features with TF-IDF...")
         input_tfidf_cat = cat_tfidf.transform([feature_text])
         input_tfidf_rec = rec_tfidf.transform([feature_text])
         
         # Make predictions
+        logger.debug("Making predictions...")
         cat_model = models["categorization"].get(categorization_model)
         rec_model = models["recommendation"].get(recommendation_model)
         if not cat_model or not rec_model:
@@ -455,6 +480,8 @@ def ats_check():
             logger.error(f"Unsupported file format: {file.filename}")
             return jsonify({"error": "Only PDF and DOCX files are supported"}), 400
 
+        logger.debug(f"Processing file: {file.filename}")
+
         with tempfile.NamedTemporaryFile(delete=False, suffix=os.path.splitext(file.filename)[1]) as tmp:
             temp_path = tmp.name
             file.save(temp_path)
@@ -463,8 +490,10 @@ def ats_check():
         format_check = check_file_format(temp_path)
         
         if temp_path.endswith(".pdf"):
+            logger.debug("Extracting text from PDF...")
             resume_text = extract_text_from_pdf(temp_path)
         elif temp_path.endswith(".docx"):
+            logger.debug("Extracting text from DOCX...")
             resume_text = extract_text_from_docx(temp_path)
         else:
             resume_text = ""
@@ -477,9 +506,11 @@ def ats_check():
         industry = request.form.get("industry", "")
         logger.debug(f"Job description length: {len(job_description)}, Industry: {industry}")
 
+        logger.debug("Checking ATS compatibility...")
         ats_results = check_ats_compatibility(resume_text, job_description)
         
         if industry:
+            logger.debug(f"Benchmarking against industry: {industry}")
             benchmark = benchmark_against_industry(resume_text, industry)
             if 'details' not in ats_results:
                 ats_results['details'] = {}
