@@ -2,7 +2,7 @@ import logging
 import os
 import joblib
 import numpy as np
-from flask import Flask, request, jsonify, render_template
+from flask import Flask, request, jsonify, render_template, send_from_directory
 from werkzeug.utils import secure_filename
 from flask_cors import CORS
 from resumes_parser import extract_resume_details
@@ -15,8 +15,11 @@ import tempfile
 import traceback
 import subprocess
 import sys
+
 app = Flask(__name__)
-CORS(app)  
+
+# Enable CORS for both local development and Render deployment
+CORS(app, resources={r"/*": {"origins": ["http://localhost:5000", "http://127.0.0.1:5000", "https://joblens-x6l9.onrender.com"]}})
 
 # Configure logging
 logging.basicConfig(
@@ -40,7 +43,7 @@ except Exception as e:
 from nltk.stem import WordNetLemmatizer
 from nltk.corpus import stopwords
 
-# Download spacy model at runtime
+# Download spacy model at runtime with improved logging
 def download_spacy_model(model_name="en_core_web_sm"):
     try:
         import spacy
@@ -49,11 +52,16 @@ def download_spacy_model(model_name="en_core_web_sm"):
     except OSError:
         logger.info(f"Downloading spacy model: {model_name}")
         try:
-            subprocess.check_call([sys.executable, "-m", "spacy", "download", model_name])
-            logger.info(f"Successfully downloaded spacy model: {model_name}")
+            result = subprocess.check_call([sys.executable, "-m", "spacy", "download", model_name])
+            logger.info(f"Subprocess result: {result}")
+            spacy.load(model_name)  # Verify the model loaded after download
+            logger.info(f"Successfully downloaded and loaded spacy model: {model_name}")
         except subprocess.CalledProcessError as e:
             logger.error(f"Failed to download spacy model '{model_name}': {str(e)}")
             raise Exception(f"Failed to download spacy model: {model_name}")
+        except Exception as e:
+            logger.error(f"Failed to load spacy model after download: {str(e)}")
+            raise Exception(f"Failed to load spacy model: {model_name}")
 
 # Call this at app startup
 try:
@@ -61,10 +69,6 @@ try:
 except Exception as e:
     logger.error(f"Spacy model setup failed: {str(e)}")
     # Continue running the app, as the model might not be critical for all routes
-
-app = Flask(__name__)
-# Enable CORS explicitly for localhost development
-CORS(app, resources={r"/*": {"origins": ["http://localhost:5000", "http://127.0.0.1:5000"]}})
 
 # Initialize lemmatizer and stopwords
 lemmatizer = WordNetLemmatizer()
@@ -253,6 +257,10 @@ def results():
     logger.debug("Serving results page")
     return render_template("results.html")
 
+@app.route("/favicon.ico")
+def favicon():
+    return send_from_directory(os.path.join(app.root_path, 'static'), 'favicon.ico', mimetype='image/vnd.microsoft.icon')
+
 @app.route("/health", methods=["GET"])
 def health_check():
     """Simple endpoint to verify server is running"""
@@ -399,7 +407,7 @@ def predict():
         logger.info(f"Decoded predictions - Category: {category_label}, Job: {job_label}")
 
         response = {
-            "Resume Data": {
+            "Resume_Data": {
                 "Name": name,
                 "Email": email,
                 "Phone": phone,
@@ -409,14 +417,14 @@ def predict():
             },
             "Predictions": {
                 "Categorization": category_label,
-                "Job Recommendation": job_label
+                "Job_Recommendation": job_label
             }
         }
         
         if cat_probs:
-            response["Predictions"]["Category Probabilities"] = cat_probs
+            response["Predictions"]["Category_Probabilities"] = cat_probs
         if job_probs:
-            response["Predictions"]["Job Recommendation Probabilities"] = job_probs
+            response["Predictions"]["Job_Recommendation_Probabilities"] = job_probs
 
         logger.info("Prediction completed successfully")
         return jsonify(response)
@@ -516,4 +524,3 @@ if __name__ == "__main__":
     logger.info("Starting Flask application")
     port = int(os.environ.get("PORT", 5000))  # Use Render's assigned port
     app.run(debug=False, host='0.0.0.0', port=port)
-
