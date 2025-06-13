@@ -191,8 +191,8 @@ def extract_key_features(resume_data):
     logger.debug(f"Feature text extracted, length: {len(weighted_text)} characters")
     return weighted_text.strip()
 
-# Base directory
-BASE_PATH = r"C:/Users/yaswa/OneDrive/Desktop/JOBLENS/model"
+# Base directory (relative to the project root)
+BASE_PATH = os.path.join(os.path.dirname(__file__), "model")
 
 # Define model paths
 MODEL_PATHS = {
