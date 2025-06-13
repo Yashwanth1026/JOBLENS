@@ -2,7 +2,7 @@ import logging
 import os
 import joblib
 import numpy as np
-from flask import Flask, request, jsonify, render_template, send_from_directory
+from flask import Flask, request, jsonify, render_template
 from werkzeug.utils import secure_filename
 from flask_cors import CORS
 from resumes_parser import extract_resume_details
@@ -16,14 +16,9 @@ import traceback
 import subprocess
 import sys
 
-app = Flask(__name__)
-
-# Enable CORS for both local development and Render deployment
-CORS(app, resources={r"/*": {"origins": ["http://localhost:5000", "http://127.0.0.1:5000", "https://joblens-x6l9.onrender.com"]}})
-
 # Configure logging
 logging.basicConfig(
-    level=logging.DEBUG,
+    level=logging.INFO,
     format='%(asctime)s - %(levelname)s - %(message)s',
     handlers=[
         logging.StreamHandler(),
@@ -32,45 +27,43 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+# Initialize Flask app
+app = Flask(__name__)
+# Enable CORS for all origins (simplified for Render)
+CORS(app)
+
 # Download necessary NLTK resources
 try:
     nltk.download('punkt', quiet=True)
     nltk.download('stopwords', quiet=True)
     nltk.download('wordnet', quiet=True)
+    logger.info("NLTK resources downloaded successfully")
 except Exception as e:
     logger.error(f"Failed to download NLTK resources: {str(e)}")
 
 from nltk.stem import WordNetLemmatizer
 from nltk.corpus import stopwords
 
-# Download spacy model at runtime with improved logging and timeout
+# Download spaCy model at runtime
 def download_spacy_model(model_name="en_core_web_sm"):
     try:
         import spacy
         spacy.load(model_name)
-        logger.info(f"Spacy model '{model_name}' is already available")
+        logger.info(f"spaCy model '{model_name}' is already available")
     except OSError:
-        logger.info(f"Downloading spacy model: {model_name}")
+        logger.info(f"Downloading spaCy model: {model_name}")
         try:
-            result = subprocess.check_call([sys.executable, "-m", "spacy", "download", model_name], timeout=300)
-            logger.info(f"Subprocess result: {result}")
-            spacy.load(model_name)  # Verify the model loaded after download
-            logger.info(f"Successfully downloaded and loaded spacy model: {model_name}")
-        except subprocess.TimeoutExpired:
-            logger.error(f"Timeout while downloading spacy model '{model_name}'")
-            raise Exception(f"Timeout while downloading spacy model: {model_name}")
+            subprocess.check_call([sys.executable, "-m", "spacy", "download", model_name])
+            logger.info(f"Successfully downloaded spaCy model: {model_name}")
         except subprocess.CalledProcessError as e:
-            logger.error(f"Failed to download spacy model '{model_name}': {str(e)}")
-            raise Exception(f"Failed to download spacy model: {model_name}")
-        except Exception as e:
-            logger.error(f"Failed to load spacy model after download: {str(e)}")
-            raise Exception(f"Failed to load spacy model: {model_name}")
+            logger.error(f"Failed to download spaCy model '{model_name}': {str(e)}")
+            raise Exception(f"Failed to download spaCy model: {model_name}")
 
-# Call this at app startup
+# Call this after app initialization
 try:
     download_spacy_model()
 except Exception as e:
-    logger.error(f"Spacy model setup failed: {str(e)}")
+    logger.error(f"spaCy model setup failed: {str(e)}")
     # Continue running the app, as the model might not be critical for all routes
 
 # Initialize lemmatizer and stopwords
@@ -191,7 +184,7 @@ def extract_key_features(resume_data):
     logger.debug(f"Feature text extracted, length: {len(weighted_text)} characters")
     return weighted_text.strip()
 
-# Base directory (relative to the project root)
+# Base directory relative to the script's location
 BASE_PATH = os.path.join(os.path.dirname(__file__), "model")
 
 # Define model paths
@@ -260,14 +253,6 @@ def results():
     logger.debug("Serving results page")
     return render_template("results.html")
 
-@app.route("/favicon.ico")
-def favicon():
-    try:
-        return send_from_directory(os.path.join(app.root_path, 'static'), 'favicon.ico', mimetype='image/vnd.microsoft.icon')
-    except Exception as e:
-        logger.error(f"Failed to serve favicon: {str(e)}")
-        return jsonify({"error": "Favicon not found"}), 404
-
 @app.route("/health", methods=["GET"])
 def health_check():
     """Simple endpoint to verify server is running"""
@@ -288,8 +273,6 @@ def predict():
             logger.error(f"Unsupported file format: {file.filename}")
             return jsonify({"error": "Only PDF and DOCX files are supported"}), 400
 
-        logger.debug(f"Processing file: {file.filename}")
-
         # Save file to temporary location
         with tempfile.NamedTemporaryFile(delete=False, suffix=os.path.splitext(file.filename)[1]) as tmp:
             temp_path = tmp.name
@@ -297,12 +280,10 @@ def predict():
         logger.info(f"Saved resume to temporary file: {temp_path}")
 
         # Extract resume details
-        logger.debug("Extracting resume details...")
         resume_data = extract_resume_details(temp_path)
         if not resume_data or "error" in resume_data:
-            error_msg = resume_data.get('error', 'Unknown error')
-            logger.error(f"Failed to extract resume details: {error_msg}")
-            return jsonify({"error": "Failed to extract resume details", "details": error_msg}), 400
+            logger.error(f"Failed to extract resume details: {resume_data.get('error', 'Unknown error')}")
+            return jsonify({"error": "Failed to extract resume details", "details": resume_data.get("error", "")}), 400
 
         logger.debug(f"Resume data extracted: {list(resume_data.keys())}")
 
@@ -324,22 +305,23 @@ def predict():
         
         education = resume_data.get("Education", "Not Found")
         if isinstance(education, list):
-            education = [str(edu) for edu in education]  # Ensure all items are strings
+            education = "\n".join(str(edu) for edu in education)
             
         experience = resume_data.get("Experience", "Not Found")
         if isinstance(experience, list):
-            experience = [
-                {
-                    "Job_Title": str(exp.get("Job Title", "N/A")) if isinstance(exp, dict) else "N/A",
-                    "Company": str(exp.get("Company", "N/A")) if isinstance(exp, dict) else "N/A",
-                    "Duration": str(exp.get("Duration", "N/A")) if isinstance(exp, dict) else "N/A",
-                    "Key_Responsibilities": [str(resp) for resp in exp.get("Key Responsibilities", [])] if isinstance(exp, dict) and isinstance(exp.get("Key Responsibilities"), list) else []
-                } if isinstance(exp, dict) else str(exp)
-                for exp in experience
-            ]
+            experience_display = []
+            for exp in experience:
+                if isinstance(exp, dict):
+                    exp_text = f"{exp.get('Job Title', 'Not Found')} at {exp.get('Company', 'Not Found')} ({exp.get('Duration', 'Not Found')})"
+                    responsibilities = exp.get('Key Responsibilities', [])
+                    if responsibilities:
+                        exp_text += "\nResponsibilities: " + "; ".join(responsibilities)
+                    experience_display.append(exp_text)
+            experience = "\n\n".join(experience_display)
+        else:
+            experience = str(experience)
         
         # Extract features
-        logger.debug("Extracting key features...")
         try:
             feature_text = extract_key_features(resume_data)
             logger.debug(f"Feature text extracted, length: {len(feature_text)} characters")
@@ -366,7 +348,6 @@ def predict():
             return jsonify({"error": "Invalid model selection"}), 400
 
         # Load TF-IDF vectorizers
-        logger.debug("Loading TF-IDF vectorizers...")
         cat_tfidf = models["categorization"].get("tfidf")
         rec_tfidf = models["recommendation"].get("tfidf")
         if not cat_tfidf or not rec_tfidf:
@@ -379,20 +360,27 @@ def predict():
             return jsonify({"error": f"Missing TF-IDF vectorizers: {', '.join(missing_files)}"}), 500
 
         # Transform features
-        logger.debug("Transforming features with TF-IDF...")
-        input_tfidf_cat = cat_tfidf.transform([feature_text])
-        input_tfidf_rec = rec_tfidf.transform([feature_text])
-        
+        try:
+            input_tfidf_cat = cat_tfidf.transform([feature_text])
+            input_tfidf_rec = rec_tfidf.transform([feature_text])
+            logger.debug("Feature text transformed successfully")
+        except Exception as e:
+            logger.error(f"Failed to transform features with TF-IDF: {str(e)}")
+            return jsonify({"error": "Failed to transform features for prediction"}), 500
+
         # Make predictions
-        logger.debug("Making predictions...")
         cat_model = models["categorization"].get(categorization_model)
         rec_model = models["recommendation"].get(recommendation_model)
         if not cat_model or not rec_model:
             logger.error("Selected models could not be loaded")
             return jsonify({"error": "Selected model could not be loaded"}), 500
 
-        category_pred = int(cat_model.predict(input_tfidf_cat)[0])
-        job_pred = int(rec_model.predict(input_tfidf_rec)[0])
+        try:
+            category_pred = int(cat_model.predict(input_tfidf_cat)[0])
+            job_pred = int(rec_model.predict(input_tfidf_rec)[0])
+        except Exception as e:
+            logger.error(f"Prediction failed: {str(e)}")
+            return jsonify({"error": "Prediction failed"}), 500
         
         # Get probabilities
         cat_probs = {}
@@ -426,30 +414,34 @@ def predict():
         # Decode predictions
         category_encoder = models["categorization"].get("label_encoder")
         job_encoder = models["recommendation"].get("label_encoder")
-        category_label = str(category_encoder.inverse_transform([category_pred])[0]) if category_encoder else "Unknown"
-        job_label = str(job_encoder.inverse_transform([job_pred])[0]) if job_encoder else "Unknown"
+        if not category_encoder or not job_encoder:
+            logger.error("Label encoders not loaded")
+            return jsonify({"error": "Label encoders not loaded"}), 500
+
+        try:
+            category_label = str(category_encoder.inverse_transform([category_pred])[0])
+            job_label = str(job_encoder.inverse_transform([job_pred])[0])
+        except Exception as e:
+            logger.error(f"Failed to decode predictions: {str(e)}")
+            return jsonify({"error": "Failed to decode predictions"}), 500
         
         logger.info(f"Decoded predictions - Category: {category_label}, Job: {job_label}")
 
         response = {
-            "Resume_Data": {
-                "Name": name,
-                "Email": email,
-                "Phone": phone,
-                "Skills": skills_display,
-                "Education": education,
-                "Experience": experience
-            },
-            "Predictions": {
-                "Categorization": category_label,
-                "Job_Recommendation": job_label
-            }
+            "Name": name,
+            "Email": email,
+            "Contact Number": phone,
+            "Skills": skills_display,
+            "Education": education,
+            "Experience": experience,
+            "Categorization": category_label,
+            "Job Recommendation": job_label
         }
         
         if cat_probs:
-            response["Predictions"]["Category_Probabilities"] = cat_probs
+            response["Category Probabilities"] = cat_probs
         if job_probs:
-            response["Predictions"]["Job_Recommendation_Probabilities"] = job_probs
+            response["Job Recommendation Probabilities"] = job_probs
 
         logger.info("Prediction completed successfully")
         return jsonify(response)
@@ -480,8 +472,6 @@ def ats_check():
             logger.error(f"Unsupported file format: {file.filename}")
             return jsonify({"error": "Only PDF and DOCX files are supported"}), 400
 
-        logger.debug(f"Processing file: {file.filename}")
-
         with tempfile.NamedTemporaryFile(delete=False, suffix=os.path.splitext(file.filename)[1]) as tmp:
             temp_path = tmp.name
             file.save(temp_path)
@@ -490,10 +480,8 @@ def ats_check():
         format_check = check_file_format(temp_path)
         
         if temp_path.endswith(".pdf"):
-            logger.debug("Extracting text from PDF...")
             resume_text = extract_text_from_pdf(temp_path)
         elif temp_path.endswith(".docx"):
-            logger.debug("Extracting text from DOCX...")
             resume_text = extract_text_from_docx(temp_path)
         else:
             resume_text = ""
@@ -506,11 +494,9 @@ def ats_check():
         industry = request.form.get("industry", "")
         logger.debug(f"Job description length: {len(job_description)}, Industry: {industry}")
 
-        logger.debug("Checking ATS compatibility...")
         ats_results = check_ats_compatibility(resume_text, job_description)
         
         if industry:
-            logger.debug(f"Benchmarking against industry: {industry}")
             benchmark = benchmark_against_industry(resume_text, industry)
             if 'details' not in ats_results:
                 ats_results['details'] = {}
@@ -523,19 +509,27 @@ def ats_check():
                     )
 
         response = {
-            "score": ats_results.get('score', 0),
-            "warnings": ats_results.get('warnings', []),
-            "recommendations": ats_results.get('recommendations', []),
-            "file_format": {
+            "analysis": {
+                "score": ats_results.get('score', 0),
+                "warnings": ats_results.get('warnings', []),
+                "recommendations": ats_results.get('recommendations', []),
+                "details": ats_results.get('details', {})
+            },
+            "report": "\n".join([
+                "=== 📊 ATS Compatibility Report ===",
+                f"🟢 Overall Score: {ats_results.get('score', 0)}/100",
+                "\n⚠️ Warnings:",
+                "\n".join(f"- {w}" for w in ats_results.get('warnings', [])),
+                "\n💡 Recommendations:",
+                "\n".join(f"- {r}" for r in ats_results.get('recommendations', []))
+            ]),
+            "format_check": {
                 "format": format_check.get("format", "unknown"),
                 "size_mb": format_check.get("size_mb", 0),
                 "issues": format_check.get("issues", [])
             }
         }
         
-        if 'details' in ats_results:
-            response["details"] = ats_results['details']
-            
         logger.info("ATS check completed successfully")
         return jsonify(response)
     
